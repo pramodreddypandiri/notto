@@ -8,16 +8,83 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { createWeekendPlans, submitFeedback } from '../services/plansService';
-import { supabase } from '../config/supabase';
+import { createWeekendPlans, submitFeedback } from '../../services/plansService';
+import { supabase } from '../../config/supabase';
 
-const PlansScreen = () => {
+// Demo mode: set to true to test UI without backend
+const DEMO_MODE = true;
+
+const DEMO_PLANS = [
+  {
+    id: '1',
+    plan_data: {
+      title: 'Saturday Evening Adventure',
+      date: 'Saturday',
+      startTime: '6:00 PM',
+      endTime: '10:00 PM',
+      activities: [
+        {
+          time: '6:00 PM',
+          name: 'Lucky Strike Bowling',
+          address: '123 Main St',
+          duration: '1.5 hours',
+        },
+        {
+          time: '7:45 PM',
+          name: 'Casa Luna Mexican Restaurant',
+          address: '456 Oak Ave',
+          duration: '1.5 hours',
+        },
+        {
+          time: '9:30 PM',
+          name: 'Dessert at Sweet Treats',
+          address: '789 Park Blvd',
+          duration: '30 minutes',
+        },
+      ],
+      reasoning: 'Based on your interest in bowling and Mexican food!',
+    },
+  },
+  {
+    id: '2',
+    plan_data: {
+      title: 'Sunday Afternoon Chill',
+      date: 'Sunday',
+      startTime: '2:00 PM',
+      endTime: '6:00 PM',
+      activities: [
+        {
+          time: '2:00 PM',
+          name: 'Downtown Bowling Alley',
+          address: '321 Center St',
+          duration: '2 hours',
+        },
+        {
+          time: '4:15 PM',
+          name: 'Taco Paradise',
+          address: '654 Elm St',
+          duration: '1.5 hours',
+        },
+      ],
+      reasoning: 'A more relaxed Sunday option with your favorite activities',
+    },
+  },
+];
+
+export default function PlansScreen() {
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const handleGeneratePlans = async () => {
     setLoading(true);
     try {
+      if (DEMO_MODE) {
+        // Simulate loading delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        setPlans(DEMO_PLANS);
+        return;
+      }
+
       // Get user location from preferences
       const { data: { user } } = await supabase.auth.getUser();
       const { data: prefs } = await supabase
@@ -52,6 +119,10 @@ const PlansScreen = () => {
 
   const handleFeedback = async (planId: string, rating: 'up' | 'down') => {
     try {
+      if (DEMO_MODE) {
+        Alert.alert('Thanks!', 'Your feedback helps us improve your plans (Demo Mode)');
+        return;
+      }
       await submitFeedback(planId, rating);
       Alert.alert('Thanks!', 'Your feedback helps us improve your plans');
     } catch (error) {
@@ -131,7 +202,7 @@ const PlansScreen = () => {
       )}
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -163,22 +234,21 @@ const styles = StyleSheet.create({
   generateButton: {
     backgroundColor: '#6366f1',
     paddingHorizontal: 32,
-    paddingVertical: 16
-    ,
+    paddingVertical: 16,
     borderRadius: 8,
     minWidth: 200,
     alignItems: 'center',
-    },
-    generateButtonText: {
+  },
+  generateButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-    },
-    plansContainer: {
+  },
+  plansContainer: {
     flex: 1,
     padding: 20,
-    },
-    planCard: {
+  },
+  planCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 20,
@@ -188,65 +258,65 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    },
-    planTitle: {
+  },
+  planTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 4,
-    },
-    planDate: {
+  },
+  planDate: {
     fontSize: 14,
     color: '#666',
     marginBottom: 16,
-    },
-    activity: {
+  },
+  activity: {
     flexDirection: 'row',
     marginBottom: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
-    },
-    activityTime: {
+  },
+  activityTime: {
     fontSize: 14,
     fontWeight: '600',
     color: '#6366f1',
     width: 70,
-    },
-    activityDetails: {
+  },
+  activityDetails: {
     flex: 1,
-    },
-    activityName: {
+  },
+  activityName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
     marginBottom: 2,
-    },
-    activityAddress: {
+  },
+  activityAddress: {
     fontSize: 14,
     color: '#666',
     marginBottom: 2,
-    },
-    activityDuration: {
+  },
+  activityDuration: {
     fontSize: 12,
     color: '#999',
-    },
-    reasoning: {
+  },
+  reasoning: {
     backgroundColor: '#f0f9ff',
     padding: 12,
     borderRadius: 8,
     marginBottom: 16,
-    },
-    reasoningText: {
+  },
+  reasoningText: {
     fontSize: 14,
     color: '#333',
     lineHeight: 20,
-    },
-    feedbackButtons: {
+  },
+  feedbackButtons: {
     flexDirection: 'row',
     gap: 12,
-    },
-    feedbackButton: {
+  },
+  feedbackButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -254,21 +324,19 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     gap: 8,
-    },
-    feedbackUp: {
+  },
+  feedbackUp: {
     backgroundColor: '#10b981',
-    },
-    feedbackDown: {
+  },
+  feedbackDown: {
     backgroundColor: '#ef4444',
-    },
-    feedbackIcon: {
+  },
+  feedbackIcon: {
     fontSize: 20,
-    },
-    feedbackText: {
+  },
+  feedbackText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
-    },
-    });
-
-    export default PlansScreen;
+  },
+});
