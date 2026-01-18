@@ -1,3 +1,6 @@
+import { buildAIProfileContext } from './profileService';
+import { ENV } from '../config/env';
+
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 
 interface ParsedNote {
@@ -9,13 +12,27 @@ interface ParsedNote {
   summary: string;
 }
 
+// Check if Claude API is configured
+const isClaudeConfigured = (): boolean => {
+  return !!(ENV.CLAUDE_API_KEY && ENV.CLAUDE_API_KEY !== 'sk-ant-YOUR_CLAUDE_API_KEY_HERE');
+};
+
 export const parseNote = async (transcript: string): Promise<ParsedNote> => {
+  // If Claude API not configured, return simple fallback
+  if (!isClaudeConfigured()) {
+    console.log('Claude API not configured - using simple parsing');
+    return {
+      type: 'intent',
+      summary: transcript,
+    };
+  }
+
   try {
     const response = await fetch(CLAUDE_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': 'your-api-key', // Note: Should be in env variable
+        'x-api-key': ENV.CLAUDE_API_KEY,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
@@ -68,7 +85,15 @@ export const generateWeekendPlans = async (
   userLocation: { lat: number; lng: number; city: string },
   pastFeedback?: any[]
 ): Promise<any[]> => {
+  // Check if Claude API is configured
+  if (!isClaudeConfigured()) {
+    throw new Error('Claude API key not configured. Please add your key to config/env.ts');
+  }
+
   try {
+    // Get user profile context for personalization
+    const profileContext = await buildAIProfileContext();
+
     // Prepare context for Claude
     const notesContext = notes
       .map(n => `- ${n.transcript} (${n.parsed_data?.summary || ''})`)
@@ -82,7 +107,7 @@ export const generateWeekendPlans = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': 'your-api-key',
+        'x-api-key': ENV.CLAUDE_API_KEY,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
@@ -97,7 +122,11 @@ export const generateWeekendPlans = async (
         messages: [
           {
             role: 'user',
-            content: `You are a weekend planning assistant. Generate 2-3 complete weekend plans based on user's notes.
+            content: `You are a weekend planning assistant. Generate 2-3 complete weekend plans that are PERSONALIZED to this user's personality and preferences.
+
+${profileContext}
+
+---
 
 USER LOCATION: ${userLocation.city} (${userLocation.lat}, ${userLocation.lng})
 
@@ -107,15 +136,27 @@ ${notesContext}
 PAST FEEDBACK:
 ${feedbackContext}
 
+---
+
+PERSONALIZATION GUIDELINES:
+- Match activity energy to their energy level preference
+- Choose venues sized for their typical group
+- Select places within their budget comfort level
+- Schedule during their preferred time of day
+- Avoid anything they've expressed dislike for
+- Include their known interests when possible
+- Match the pace to their preference (relaxed vs packed)
+- Consider their social openness when suggesting new places
+
 TASK:
-1. Search for real places in ${userLocation.city} that match their interests
+1. Search for real places in ${userLocation.city} that match their interests AND personality
 2. Create 2-3 complete plans with:
-   - Timeline (start/end times)
-   - Sequence of activities (2-4 activities per plan)
+   - Timeline (start/end times matching their time preference)
+   - Sequence of activities (2-4 activities per plan, matching their pace preference)
    - Actual place names and locations
-   - Brief reasoning (why this matches their notes)
+   - Brief reasoning (why this matches BOTH their notes AND personality)
 3. Each plan should be 3-5 hours total
-4. Consider: open hours, distance between places, activity flow
+4. Consider: open hours, distance between places, activity flow, crowd levels, budget
 
 Return ONLY valid JSON array:
 [
@@ -130,18 +171,23 @@ Return ONLY valid JSON array:
         "name": "Lucky Strike Bowling",
         "address": "123 Main St",
         "type": "activity",
-        "duration": "1.5 hours"
+        "duration": "1.5 hours",
+        "priceRange": "$$",
+        "crowdLevel": "moderate"
       },
       {
         "time": "8:30 PM",
         "name": "Giordano's Pizza",
         "address": "456 Elm St",
         "type": "food",
-        "duration": "1 hour"
+        "duration": "1 hour",
+        "priceRange": "$$",
+        "crowdLevel": "moderate"
       }
     ],
-    "reasoning": "You mentioned wanting bowling and pizza this week",
-    "totalDistance": "2.3 miles"
+    "reasoning": "You mentioned wanting bowling, and as an introvert who prefers moderate crowds, this smaller bowling alley is perfect",
+    "totalDistance": "2.3 miles",
+    "matchScore": 92
   }
 ]`,
           },

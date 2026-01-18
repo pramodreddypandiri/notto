@@ -1,12 +1,13 @@
 /**
- * Settings Screen - Premium settings interface
+ * Profile Screen - Combined settings and profile management
  *
  * Features:
- * - Animated section cards
- * - Premium input styling
- * - Toggle switches with haptic feedback
- * - Sound settings control
- * - Clean, modern design
+ * - User account info
+ * - Personalization settings
+ * - App settings (notifications, theme, sound)
+ * - Location settings
+ * - About section
+ * - Sign out
  */
 
 import React, { useState, useEffect } from 'react';
@@ -20,32 +21,30 @@ import {
   Switch,
   StatusBar,
 } from 'react-native';
-import Animated, {
-  FadeInDown,
-} from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Theme
-import { colors, typography, spacing, borderRadius, shadows, layout, getThemedColors } from '../../theme';
+import { colors, typography, spacing, borderRadius, shadows, layout, getThemedColors } from '../theme';
 
 // Components
-import AnimatedPressable from '../../components/ui/AnimatedPressable';
-import PremiumButton from '../../components/ui/PremiumButton';
+import AnimatedPressable from '../components/ui/AnimatedPressable';
+import PremiumButton from '../components/ui/PremiumButton';
 
 // Services
-import { supabase } from '../../config/supabase';
-import soundService from '../../services/soundService';
-import { getUserProfile, UserProfile } from '../../services/profileService';
+import { supabase } from '../config/supabase';
+import soundService from '../services/soundService';
+import { getUserProfile, UserProfile } from '../services/profileService';
 
 // Context
-import { useTheme } from '../../context/ThemeContext';
+import { useTheme } from '../context/ThemeContext';
 
-// Router
-import { router } from 'expo-router';
-
-export default function SettingsScreen() {
+export default function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const [city, setCity] = useState('');
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -166,22 +165,27 @@ export default function SettingsScreen() {
     ]);
   };
 
+  const handleBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.back();
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: themedColors.background.primary }]}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Header */}
-      <LinearGradient
-        colors={colors.gradients.primary as [string, string]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.header}
-      >
-        <Animated.View entering={FadeInDown.duration(500)}>
-          <Text style={styles.title}>Settings</Text>
-          <Text style={styles.subtitle}>Customize your experience</Text>
-        </Animated.View>
-      </LinearGradient>
+      <View style={[styles.header, { paddingTop: insets.top + spacing[2] }]}>
+        <AnimatedPressable
+          onPress={handleBack}
+          style={[styles.backButton, { backgroundColor: themedColors.surface.secondary }]}
+          hapticType="light"
+        >
+          <Ionicons name="chevron-back" size={24} color={themedColors.text.primary} />
+        </AnimatedPressable>
+        <Text style={[styles.headerTitle, { color: themedColors.text.primary }]}>Profile & Settings</Text>
+        <View style={styles.headerRight} />
+      </View>
 
       <ScrollView
         style={styles.content}
@@ -227,10 +231,10 @@ export default function SettingsScreen() {
               <>
                 <View style={styles.profileSummary}>
                   <View style={styles.profileSummaryRow}>
-                    <Text style={[styles.profileLabel, { color: themedColors.text.primary }]}>Profile</Text>
+                    <Text style={[styles.profileLabel, { color: themedColors.text.primary }]}>Personality Profile</Text>
                     <View style={styles.profileBadge}>
                       <Ionicons name="checkmark-circle" size={16} color={colors.semantic.success} />
-                      <Text style={styles.profileBadgeText}>Personalized</Text>
+                      <Text style={styles.profileBadgeText}>Complete</Text>
                     </View>
                   </View>
                   <Text style={[styles.profileHint, { color: themedColors.text.tertiary }]}>
@@ -288,7 +292,7 @@ export default function SettingsScreen() {
 
         {/* Location Section */}
         <Animated.View
-          entering={FadeInDown.delay(250).springify()}
+          entering={FadeInDown.delay(200).springify()}
           style={styles.section}
         >
           <Text style={[styles.sectionTitle, { color: themedColors.text.tertiary }]}>Location</Text>
@@ -336,37 +340,37 @@ export default function SettingsScreen() {
           </View>
         </Animated.View>
 
-        {/* Preferences Section */}
+        {/* App Settings Section */}
         <Animated.View
-          entering={FadeInDown.delay(300).springify()}
+          entering={FadeInDown.delay(250).springify()}
           style={styles.section}
         >
-          <Text style={[styles.sectionTitle, { color: themedColors.text.tertiary }]}>Preferences</Text>
+          <Text style={[styles.sectionTitle, { color: themedColors.text.tertiary }]}>App Settings</Text>
           <View style={[styles.card, shadows.md, { backgroundColor: themedColors.surface.primary }]}>
             <SettingsRow
-              icon="volume-high-outline"
-              title="Sound Effects"
-              description="Play sounds for actions and notifications"
+              icon="notifications-outline"
+              title="Notifications"
+              description="Get reminded about your plans"
               themedColors={themedColors}
               trailing={
-                <Switch
-                  value={soundEnabled}
-                  onValueChange={handleToggleSound}
-                  trackColor={{
-                    false: colors.neutral[200],
-                    true: colors.primary[400],
-                  }}
-                  thumbColor={colors.neutral[0]}
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={themedColors.text.muted}
                 />
               }
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                Alert.alert('Coming Soon', 'Notification settings will be available in a future update.');
+              }}
             />
 
             <View style={[styles.divider, { backgroundColor: themedColors.surface.border }]} />
 
             <SettingsRow
               icon="moon-outline"
-              title="Dark Mode"
-              description={themeMode === 'system' ? 'Following system setting' : isDark ? 'Dark theme active' : 'Light theme active'}
+              title="Theme"
+              description={themeMode === 'system' ? 'Following system setting' : isDark ? 'Dark theme' : 'Light theme'}
               themedColors={themedColors}
               trailing={
                 <View style={styles.themeSwitcher}>
@@ -398,28 +402,28 @@ export default function SettingsScreen() {
             <View style={[styles.divider, { backgroundColor: themedColors.surface.border }]} />
 
             <SettingsRow
-              icon="notifications-outline"
-              title="Notifications"
-              description="Get reminded about your plans"
+              icon="volume-high-outline"
+              title="Sound Effects"
+              description="Play sounds for actions"
               themedColors={themedColors}
               trailing={
-                <Ionicons
-                  name="chevron-forward"
-                  size={20}
-                  color={themedColors.text.muted}
+                <Switch
+                  value={soundEnabled}
+                  onValueChange={handleToggleSound}
+                  trackColor={{
+                    false: colors.neutral[200],
+                    true: colors.primary[400],
+                  }}
+                  thumbColor={colors.neutral[0]}
                 />
               }
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                Alert.alert('Coming Soon', 'Notification settings will be available in a future update.');
-              }}
             />
           </View>
         </Animated.View>
 
         {/* About Section */}
         <Animated.View
-          entering={FadeInDown.delay(400).springify()}
+          entering={FadeInDown.delay(300).springify()}
           style={styles.section}
         >
           <Text style={[styles.sectionTitle, { color: themedColors.text.tertiary }]}>About</Text>
@@ -458,7 +462,7 @@ export default function SettingsScreen() {
         {/* Sign Out */}
         {user && (
           <Animated.View
-            entering={FadeInDown.delay(500).springify()}
+            entering={FadeInDown.delay(350).springify()}
             style={styles.section}
           >
             <PremiumButton
@@ -479,7 +483,7 @@ export default function SettingsScreen() {
         )}
 
         {/* Bottom spacing */}
-        <View style={styles.bottomSpacer} />
+        <View style={[styles.bottomSpacer, { paddingBottom: insets.bottom }]} />
       </ScrollView>
     </View>
   );
@@ -499,20 +503,17 @@ function SettingsRow({
   description?: string;
   trailing?: React.ReactNode;
   onPress?: () => void;
-  themedColors?: ReturnType<typeof getThemedColors>;
+  themedColors: ReturnType<typeof getThemedColors>;
 }) {
-  const textColor = themedColors?.text.primary || colors.neutral[900];
-  const descColor = themedColors?.text.tertiary || colors.neutral[500];
-
   const content = (
     <View style={styles.settingsRow}>
       <View style={styles.settingsRowIcon}>
         <Ionicons name={icon as any} size={22} color={colors.primary[500]} />
       </View>
       <View style={styles.settingsRowContent}>
-        <Text style={[styles.settingsRowTitle, { color: textColor }]}>{title}</Text>
+        <Text style={[styles.settingsRowTitle, { color: themedColors.text.primary }]}>{title}</Text>
         {description && (
-          <Text style={[styles.settingsRowDescription, { color: descColor }]}>{description}</Text>
+          <Text style={[styles.settingsRowDescription, { color: themedColors.text.tertiary }]}>{description}</Text>
         )}
       </View>
       {trailing}
@@ -533,22 +534,27 @@ function SettingsRow({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
   },
   header: {
-    paddingTop: layout.statusBarOffset + spacing[4],
-    paddingHorizontal: spacing[5],
-    paddingBottom: spacing[5],
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[3],
   },
-  title: {
-    fontSize: typography.fontSize['2xl'],
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral[0],
-    marginBottom: spacing[1],
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  subtitle: {
-    fontSize: typography.fontSize.base,
-    color: 'rgba(255,255,255,0.8)',
+  headerTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  headerRight: {
+    width: 40,
   },
   content: {
     flex: 1,
@@ -562,14 +568,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral[500],
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: spacing[3],
     marginLeft: spacing[1],
   },
   card: {
-    backgroundColor: colors.neutral[0],
     borderRadius: borderRadius.xl,
     padding: spacing[4],
   },
@@ -598,12 +602,10 @@ const styles = StyleSheet.create({
   accountEmail: {
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral[900],
     marginBottom: spacing[1],
   },
   accountLabel: {
     fontSize: typography.fontSize.sm,
-    color: colors.neutral[500],
   },
   inputGroup: {
     marginBottom: spacing[4],
@@ -611,16 +613,13 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
-    color: colors.neutral[700],
     marginBottom: spacing[2],
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.neutral[50],
     borderRadius: borderRadius.lg,
     borderWidth: 1,
-    borderColor: colors.neutral[200],
     paddingHorizontal: spacing[3],
   },
   inputIcon: {
@@ -630,11 +629,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: spacing[3],
     fontSize: typography.fontSize.base,
-    color: colors.neutral[900],
   },
   hint: {
     fontSize: typography.fontSize.xs,
-    color: colors.neutral[500],
     marginTop: spacing[3],
     lineHeight: typography.fontSize.xs * typography.lineHeight.relaxed,
   },
@@ -658,21 +655,17 @@ const styles = StyleSheet.create({
   settingsRowTitle: {
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.medium,
-    color: colors.neutral[900],
   },
   settingsRowDescription: {
     fontSize: typography.fontSize.sm,
-    color: colors.neutral[500],
     marginTop: spacing[1],
   },
   divider: {
     height: 1,
-    backgroundColor: colors.neutral[100],
     marginVertical: spacing[3],
   },
   versionText: {
     fontSize: typography.fontSize.sm,
-    color: colors.neutral[500],
   },
   madeWithRow: {
     flexDirection: 'row',
@@ -680,7 +673,6 @@ const styles = StyleSheet.create({
   },
   madeWithText: {
     fontSize: typography.fontSize.sm,
-    color: colors.neutral[500],
   },
   bottomSpacer: {
     height: spacing[10],
@@ -697,7 +689,6 @@ const styles = StyleSheet.create({
   profileLabel: {
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral[900],
   },
   profileBadge: {
     flexDirection: 'row',
@@ -715,7 +706,6 @@ const styles = StyleSheet.create({
   },
   profileHint: {
     fontSize: typography.fontSize.sm,
-    color: colors.neutral[500],
     lineHeight: typography.fontSize.sm * typography.lineHeight.relaxed,
   },
   themeSwitcher: {

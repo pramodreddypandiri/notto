@@ -83,17 +83,11 @@ export default function TabLayout() {
           ),
         }}
       />
+      {/* Settings tab hidden - accessible via profile icon in TopBar */}
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon
-              name={focused ? 'settings' : 'settings-outline'}
-              color={color}
-              focused={focused}
-            />
-          ),
+          href: null, // Hide from tab bar
         }}
       />
     </Tabs>

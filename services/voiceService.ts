@@ -1,5 +1,5 @@
 import { Audio } from 'expo-av';
-import { Platform } from 'react-native';
+import { ENV } from '../config/env';
 
 class VoiceService {
   private recording: Audio.Recording | null = null;
@@ -148,22 +148,50 @@ class VoiceService {
   }
 
   /**
-   * Convert audio file to text using a speech-to-text service
-   * This is a placeholder - implement with your preferred service (OpenAI Whisper, Google, etc.)
+   * Convert audio file to text using OpenAI Whisper API
    */
   async transcribeAudio(audioUri: string): Promise<string> {
     try {
-      // TODO: Implement actual transcription
-      // Options:
-      // 1. OpenAI Whisper API
-      // 2. Google Cloud Speech-to-Text
-      // 3. Azure Speech Services
-      // 4. AWS Transcribe
+      // Check if API key is configured
+      if (!ENV.OPENAI_API_KEY || ENV.OPENAI_API_KEY === 'sk-YOUR_OPENAI_API_KEY_HERE') {
+        throw new Error('OpenAI API key not configured. Please add your key to config/env.ts');
+      }
 
-      console.log('Transcribing audio from:', audioUri);
-      
-      // Placeholder return
-      throw new Error('Transcription service not implemented yet');
+      // Get filename from URI
+      const filename = audioUri.split('/').pop() || 'audio.m4a';
+
+      // Create form data - React Native style
+      // In React Native, FormData.append for files requires an object with uri, type, and name
+      const formData = new FormData();
+      formData.append('file', {
+        uri: audioUri,
+        type: 'audio/m4a',
+        name: filename,
+      } as any);
+      formData.append('model', 'whisper-1');
+
+      // Call OpenAI Whisper API
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${ENV.OPENAI_API_KEY}`,
+          // Note: Don't set Content-Type for FormData, fetch will set it automatically with boundary
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Whisper API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.text) {
+        throw new Error('No transcription returned from Whisper API');
+      }
+
+      return data.text;
     } catch (error) {
       console.error('Failed to transcribe audio:', error);
       throw error;

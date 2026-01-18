@@ -74,7 +74,7 @@ export const colors = {
     950: '#0c0a09',
   },
 
-  // Background colors
+  // Background colors (light mode)
   background: {
     primary: '#fafafa',
     secondary: '#ffffff',
@@ -82,6 +82,16 @@ export const colors = {
     elevated: '#ffffff',
     overlay: 'rgba(12, 10, 9, 0.4)',
     overlayDark: 'rgba(12, 10, 9, 0.7)',
+  },
+
+  // Dark mode background colors
+  backgroundDark: {
+    primary: '#0c0a09',
+    secondary: '#1c1917',
+    tertiary: '#292524',
+    elevated: '#292524',
+    overlay: 'rgba(0, 0, 0, 0.6)',
+    overlayDark: 'rgba(0, 0, 0, 0.8)',
   },
 
   // Gradient presets
@@ -400,6 +410,32 @@ export const tagColors = {
   },
 };
 
+// Helper function to get themed colors based on dark mode
+export const getThemedColors = (isDark: boolean) => ({
+  ...colors,
+  background: isDark ? colors.backgroundDark : colors.background,
+  // Text colors swap in dark mode
+  text: {
+    primary: isDark ? colors.neutral[50] : colors.neutral[900],
+    secondary: isDark ? colors.neutral[300] : colors.neutral[700],
+    tertiary: isDark ? colors.neutral[400] : colors.neutral[500],
+    muted: isDark ? colors.neutral[500] : colors.neutral[400],
+    inverse: isDark ? colors.neutral[900] : colors.neutral[0],
+  },
+  // Card and surface colors
+  surface: {
+    primary: isDark ? colors.neutral[900] : colors.neutral[0],
+    secondary: isDark ? colors.neutral[800] : colors.neutral[50],
+    border: isDark ? colors.neutral[700] : colors.neutral[200],
+  },
+  // Input colors
+  input: {
+    background: isDark ? colors.neutral[800] : colors.neutral[50],
+    border: isDark ? colors.neutral[700] : colors.neutral[200],
+    placeholder: isDark ? colors.neutral[500] : colors.neutral[400],
+  },
+});
+
 // Export everything as default theme object
 const theme = {
   colors,
@@ -411,6 +447,7 @@ const theme = {
   animation,
   layout,
   tagColors,
+  getThemedColors,
 };
 
 export default theme;

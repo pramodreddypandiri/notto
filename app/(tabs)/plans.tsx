@@ -18,22 +18,23 @@ import {
   StatusBar,
   Alert,
 } from 'react-native';
-import Animated, {
-  FadeIn,
-  FadeInDown,
-} from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 
 // Theme
-import { colors, typography, spacing, borderRadius, shadows, layout } from '../../theme';
+import { colors, typography, spacing, borderRadius, shadows, getThemedColors } from '../../theme';
+
+// Context
+import { useTheme } from '../../context/ThemeContext';
 
 // Components
 import AnimatedPressable from '../../components/ui/AnimatedPressable';
 import PremiumButton from '../../components/ui/PremiumButton';
 import PlanCard from '../../components/plans/PlanCard';
 import { PlanGenerationLoader } from '../../components/plans/PlanGenerationLoader';
+import TopBar from '../../components/common/TopBar';
 
 // Services
 import { createWeekendPlans, submitFeedback } from '../../services/plansService';
@@ -131,6 +132,10 @@ const DEMO_PLANS: Plan[] = [
 ];
 
 export default function PlansScreen() {
+  // Theme
+  const { isDark } = useTheme();
+  const themedColors = getThemedColors(isDark);
+
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -219,25 +224,21 @@ export default function PlansScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <View style={[styles.container, { backgroundColor: themedColors.background.primary }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      {/* Header */}
-      <LinearGradient
-        colors={colors.gradients.primary as [string, string]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.header}
-      >
-        <Animated.View entering={FadeInDown.duration(500)}>
-          <Text style={styles.title}>Weekend Plans</Text>
-          <Text style={styles.subtitle}>
-            {plans.length > 0
-              ? `${plans.length} plans ready for you`
-              : 'Let\'s plan something amazing'}
-          </Text>
-        </Animated.View>
-      </LinearGradient>
+      {/* Top Bar with greeting and profile */}
+      <TopBar themedColors={themedColors} />
+
+      {/* Page Title */}
+      <View style={styles.pageTitleContainer}>
+        <Text style={[styles.pageTitle, { color: themedColors.text.primary }]}>Weekend Plans</Text>
+        <Text style={[styles.pageSubtitle, { color: themedColors.text.tertiary }]}>
+          {plans.length > 0
+            ? `${plans.length} plans ready for you`
+            : 'Let\'s plan something amazing'}
+        </Text>
+      </View>
 
       {/* Content */}
       {showGenerator ? (
@@ -246,7 +247,7 @@ export default function PlansScreen() {
           onComplete={() => setShowGenerator(false)}
         />
       ) : plans.length === 0 ? (
-        <EmptyState onGenerate={handleGeneratePlans} loading={loading} />
+        <EmptyState onGenerate={handleGeneratePlans} loading={loading} themedColors={themedColors} />
       ) : (
         <Animated.ScrollView
           entering={FadeIn.delay(300)}
@@ -265,14 +266,14 @@ export default function PlansScreen() {
           {/* Plans header */}
           <View style={styles.plansHeader}>
             <View>
-              <Text style={styles.plansTitle}>Your Plans</Text>
-              <Text style={styles.plansSubtitle}>
+              <Text style={[styles.plansTitle, { color: themedColors.text.primary }]}>Your Plans</Text>
+              <Text style={[styles.plansSubtitle, { color: themedColors.text.tertiary }]}>
                 Tap a plan to see details
               </Text>
             </View>
             <AnimatedPressable
               onPress={handleRegenerate}
-              style={styles.regenerateButton}
+              style={[styles.regenerateButton, { backgroundColor: isDark ? colors.primary[900] : colors.primary[50] }]}
               hapticType="light"
             >
               <Ionicons
@@ -306,9 +307,11 @@ export default function PlansScreen() {
 function EmptyState({
   onGenerate,
   loading,
+  themedColors,
 }: {
   onGenerate: () => void;
   loading: boolean;
+  themedColors?: ReturnType<typeof getThemedColors>;
 }) {
   return (
     <Animated.View
@@ -331,8 +334,8 @@ function EmptyState({
         <View style={[styles.decorativeRing, styles.ring3]} />
       </View>
 
-      <Text style={styles.emptyTitle}>Ready to plan your weekend?</Text>
-      <Text style={styles.emptyText}>
+      <Text style={[styles.emptyTitle, { color: themedColors?.text.primary || colors.neutral[900] }]}>Ready to plan your weekend?</Text>
+      <Text style={[styles.emptyText, { color: themedColors?.text.tertiary || colors.neutral[500] }]}>
         I'll analyze your notes and preferences to create personalized plans
         just for you.
       </Text>
@@ -341,14 +344,17 @@ function EmptyState({
         <FeatureItem
           icon="location"
           text="Finds places near you"
+          themedColors={themedColors}
         />
         <FeatureItem
           icon="heart"
           text="Based on your preferences"
+          themedColors={themedColors}
         />
         <FeatureItem
           icon="time"
           text="Optimized timing"
+          themedColors={themedColors}
         />
       </View>
 
@@ -371,13 +377,13 @@ function EmptyState({
 }
 
 // Feature Item Component
-function FeatureItem({ icon, text }: { icon: string; text: string }) {
+function FeatureItem({ icon, text, themedColors }: { icon: string; text: string; themedColors?: ReturnType<typeof getThemedColors> }) {
   return (
     <View style={styles.featureItem}>
-      <View style={styles.featureIcon}>
+      <View style={[styles.featureIcon, { backgroundColor: themedColors?.primary[50] || colors.primary[50] }]}>
         <Ionicons name={icon as any} size={16} color={colors.primary[500]} />
       </View>
-      <Text style={styles.featureText}>{text}</Text>
+      <Text style={[styles.featureText, { color: themedColors?.text.secondary || colors.neutral[700] }]}>{text}</Text>
     </View>
   );
 }
@@ -387,20 +393,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background.primary,
   },
-  header: {
-    paddingTop: layout.statusBarOffset + spacing[4],
+  pageTitleContainer: {
     paddingHorizontal: spacing[5],
-    paddingBottom: spacing[5],
+    marginBottom: spacing[4],
   },
-  title: {
-    fontSize: typography.fontSize['2xl'],
+  pageTitle: {
+    fontSize: typography.fontSize.xl,
     fontWeight: typography.fontWeight.bold,
-    color: colors.neutral[0],
     marginBottom: spacing[1],
   },
-  subtitle: {
-    fontSize: typography.fontSize.base,
-    color: 'rgba(255,255,255,0.8)',
+  pageSubtitle: {
+    fontSize: typography.fontSize.sm,
   },
   plansContainer: {
     flex: 1,

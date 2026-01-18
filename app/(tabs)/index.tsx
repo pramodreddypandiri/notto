@@ -3,7 +3,8 @@
  *
  * Features:
  * - Animated note cards with swipe-to-delete
- * - Premium voice capture experience
+ * - WhatsApp-style input bar (text + hold-to-record mic)
+ * - Transcription review before saving
  * - Pull-to-refresh
  * - Skeleton loading states
  * - Bottom sheet tag selector
@@ -19,18 +20,17 @@ import {
   StatusBar,
   Alert,
 } from 'react-native';
-import Animated, {
-  FadeIn,
-  FadeInDown,
-  SlideInRight,
-} from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
 // Theme
-import { colors, typography, spacing, borderRadius, shadows, layout } from '../../theme';
+import { colors, typography, spacing, borderRadius, layout, getThemedColors } from '../../theme';
+
+// Context
+import { useTheme } from '../../context/ThemeContext';
 
 // Components
 import AnimatedPressable from '../../components/ui/AnimatedPressable';
@@ -38,8 +38,9 @@ import PremiumButton from '../../components/ui/PremiumButton';
 import BottomSheet from '../../components/ui/BottomSheet';
 import { NotesListSkeleton } from '../../components/ui/SkeletonLoader';
 import NoteCard from '../../components/notes/NoteCard';
-import VoiceCaptureSheet from '../../components/voice/VoiceCaptureSheet';
-import VoiceRecordButton from '../../components/voice/VoiceRecordButton';
+import NoteInputBar from '../../components/notes/NoteInputBar';
+import TranscriptionReview from '../../components/notes/TranscriptionReview';
+import TopBar from '../../components/common/TopBar';
 
 // Services
 import voiceService from '../../services/voiceService';
@@ -47,7 +48,7 @@ import { createNote, getNotes } from '../../services/notesService';
 import soundService from '../../services/soundService';
 
 // Demo mode
-const DEMO_MODE = true;
+const DEMO_MODE = false;
 
 type NoteTag = 'reminder' | 'preference' | 'my_type' | 'my_vibe';
 
@@ -123,20 +124,42 @@ const TAG_OPTIONS: {
 export default function HomeScreen() {
   const router = useRouter();
 
+  // Theme
+  const { isDark } = useTheme();
+  const themedColors = getThemedColors(isDark);
+
   // State
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [notificationCount] = useState(2);
 
-  // Voice capture state
-  const [showVoiceCapture, setShowVoiceCapture] = useState(false);
+  // Voice recording state (new hold-to-record flow)
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showTranscriptionReview, setShowTranscriptionReview] = useState(false);
+  const [currentTranscription, setCurrentTranscription] = useState('');
+  const [currentAudioUri, setCurrentAudioUri] = useState<string | null>(null);
 
   // Tag modal state
   const [showTagSheet, setShowTagSheet] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+
+  // Recording duration timer
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | undefined;
+    if (isRecording) {
+      setRecordingDuration(0);
+      interval = setInterval(() => {
+        setRecordingDuration((d) => d + 1);
+      }, 1000);
+    } else {
+      setRecordingDuration(0);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isRecording]);
 
   // Initialize
   useEffect(() => {
@@ -169,69 +192,131 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, []);
 
-  // Voice recording handlers
-  const handleToggleRecording = async () => {
-    if (isRecording) {
-      // Stop recording
-      setIsProcessing(true);
-      try {
-        const audioUri = await voiceService.stopRecording();
-        await soundService.playRecordStop();
-
-        if (audioUri) {
-          if (DEMO_MODE) {
-            // Simulate processing
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-            const newNote: Note = {
-              id: Date.now().toString(),
-              transcript: 'New voice note recorded',
-              parsed_data: {
-                summary: 'Voice note captured (demo mode)',
-                type: 'intent',
-              },
-              created_at: new Date().toISOString(),
-            };
-            setNotes([newNote, ...notes]);
-            await soundService.playSuccess();
-          } else {
-            const transcript =
-              'Audio recorded - transcription not implemented yet';
-            await createNote(transcript, audioUri);
-            await loadNotes();
-          }
-        }
-      } catch (error) {
-        console.error('Recording error:', error);
-        await soundService.playError();
-      } finally {
-        setIsRecording(false);
-        setIsProcessing(false);
-        setShowVoiceCapture(false);
+  // Text note handler
+  const handleSendText = async (text: string) => {
+    try {
+      if (DEMO_MODE) {
+        const newNote: Note = {
+          id: Date.now().toString(),
+          transcript: text,
+          parsed_data: {
+            summary: text.slice(0, 50),
+            type: 'intent',
+          },
+          created_at: new Date().toISOString(),
+        };
+        setNotes([newNote, ...notes]);
+        await soundService.playSuccess();
+      } else {
+        await createNote(text);
+        await loadNotes();
+        await soundService.playSuccess();
       }
-    } else {
-      // Start recording
-      try {
-        await voiceService.startRecording();
-        await soundService.playRecordStart();
-        setIsRecording(true);
-      } catch (error) {
-        console.error('Failed to start recording:', error);
-        Alert.alert('Error', 'Failed to start recording. Please check permissions.');
-      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error('Failed to save text note:', error);
+      await soundService.playError();
+      Alert.alert('Error', 'Failed to save note. Please try again.');
     }
   };
 
-  const handleOpenVoiceCapture = () => {
-    setShowVoiceCapture(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  // Voice recording handlers (hold-to-record flow)
+  const handleRecordingStart = async () => {
+    try {
+      await voiceService.startRecording();
+      await soundService.playRecordStart();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      Alert.alert('Error', 'Failed to start recording. Please check permissions.');
+    }
   };
 
-  const handleCloseVoiceCapture = () => {
+  const handleRecordingEnd = async () => {
+    if (!isRecording) return;
+
+    setIsRecording(false);
+    setIsProcessing(true);
+    setShowTranscriptionReview(true);
+
+    try {
+      const audioUri = await voiceService.stopRecording();
+      await soundService.playRecordStop();
+
+      if (audioUri) {
+        setCurrentAudioUri(audioUri);
+
+        if (DEMO_MODE) {
+          // Simulate transcription
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          setCurrentTranscription('This is a demo transcription of your voice note.');
+        } else {
+          // Transcribe using OpenAI Whisper
+          const transcript = await voiceService.transcribeAudio(audioUri);
+          setCurrentTranscription(transcript);
+        }
+      }
+    } catch (error) {
+      console.error('Recording/transcription error:', error);
+      await soundService.playError();
+      setShowTranscriptionReview(false);
+      Alert.alert('Error', 'Failed to process recording. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRecordingCancel = () => {
     if (isRecording) {
       voiceService.cancelRecording();
       setIsRecording(false);
     }
-    setShowVoiceCapture(false);
+  };
+
+  const handleSaveTranscription = async (text: string) => {
+    try {
+      if (DEMO_MODE) {
+        const newNote: Note = {
+          id: Date.now().toString(),
+          transcript: text,
+          parsed_data: {
+            summary: text.slice(0, 50),
+            type: 'intent',
+          },
+          created_at: new Date().toISOString(),
+        };
+        setNotes([newNote, ...notes]);
+      } else {
+        await createNote(text, currentAudioUri || undefined);
+        await loadNotes();
+      }
+      await soundService.playSuccess();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error('Failed to save note:', error);
+      await soundService.playError();
+      Alert.alert('Error', 'Failed to save note. Please try again.');
+    } finally {
+      setShowTranscriptionReview(false);
+      setCurrentTranscription('');
+      setCurrentAudioUri(null);
+    }
+  };
+
+  const handleReRecord = () => {
+    setShowTranscriptionReview(false);
+    setCurrentTranscription('');
+    setCurrentAudioUri(null);
+    // Small delay before allowing re-record
+    setTimeout(() => {
+      handleRecordingStart();
+    }, 300);
+  };
+
+  const handleCancelReview = () => {
+    setShowTranscriptionReview(false);
+    setCurrentTranscription('');
+    setCurrentAudioUri(null);
   };
 
   // Note actions
@@ -286,76 +371,45 @@ export default function HomeScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <View style={[styles.container, { backgroundColor: themedColors.background.primary }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      {/* Header */}
-      <LinearGradient
-        colors={colors.gradients.primary as [string, string]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.header}
-      >
-        <Animated.View
-          entering={FadeInDown.duration(500)}
-          style={styles.headerContent}
+      {/* Top Bar with greeting and profile */}
+      <TopBar themedColors={themedColors} />
+
+      {/* Plan Weekend Card */}
+      <View style={styles.planCardContainer}>
+        <AnimatedPressable
+          onPress={navigateToPlans}
+          style={styles.planCard}
+          hapticType="medium"
+          scaleIntensity="subtle"
         >
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.greeting}>Good day</Text>
-              <Text style={styles.title}>Weekend Planner</Text>
-            </View>
-
-            {notificationCount > 0 && (
-              <AnimatedPressable
-                style={styles.notificationButton}
-                hapticType="light"
-              >
-                <Ionicons
-                  name="notifications-outline"
-                  size={24}
-                  color={colors.neutral[0]}
-                />
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationBadgeText}>
-                    {notificationCount}
-                  </Text>
-                </View>
-              </AnimatedPressable>
-            )}
-          </View>
-
-          <AnimatedPressable
-            onPress={navigateToPlans}
-            style={styles.planButton}
-            hapticType="medium"
-            scaleIntensity="subtle"
+          <LinearGradient
+            colors={colors.gradients.primary as [string, string]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.planCardGradient}
           >
-            <LinearGradient
-              colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
-              style={styles.planButtonGradient}
-            >
-              <Ionicons
-                name="sparkles"
-                size={20}
-                color={colors.neutral[0]}
-              />
-              <Text style={styles.planButtonText}>Plan My Weekend</Text>
-              <Ionicons
-                name="chevron-forward"
-                size={18}
-                color={colors.neutral[0]}
-              />
-            </LinearGradient>
-          </AnimatedPressable>
-        </Animated.View>
-      </LinearGradient>
+            <View style={styles.planCardContent}>
+              <View style={styles.planCardIcon}>
+                <Ionicons name="sparkles" size={24} color={colors.neutral[0]} />
+              </View>
+              <View style={styles.planCardText}>
+                <Text style={styles.planCardTitle}>Plan My Weekend</Text>
+                <Text style={styles.planCardSubtitle}>Generate personalized plans</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.neutral[0]} />
+            </View>
+          </LinearGradient>
+        </AnimatedPressable>
+      </View>
 
       {/* Notes List */}
       <View style={styles.notesSection}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Notes</Text>
-          <Text style={styles.noteCount}>{notes.length} notes</Text>
+          <Text style={[styles.sectionTitle, { color: themedColors.text.primary }]}>Recent Notes</Text>
+          <Text style={[styles.noteCount, { color: themedColors.text.tertiary }]}>{notes.length} notes</Text>
         </View>
 
         {loading ? (
@@ -376,7 +430,7 @@ export default function HomeScreen() {
             }
           >
             {notes.length === 0 ? (
-              <EmptyState onRecord={handleOpenVoiceCapture} />
+              <EmptyState onRecord={handleRecordingStart} themedColors={themedColors} />
             ) : (
               notes.map((note, index) => (
                 <NoteCard
@@ -392,29 +446,28 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* Bottom Recording Bar */}
-      <Animated.View
-        entering={SlideInRight.delay(500).springify()}
-        style={styles.bottomBar}
-      >
-        <View style={styles.recordButtonContainer}>
-          <VoiceRecordButton
-            isRecording={false}
-            isProcessing={false}
-            onPress={handleOpenVoiceCapture}
-            size={64}
-          />
-        </View>
-      </Animated.View>
+      {/* Input Bar - WhatsApp style (text input + hold-to-record mic) */}
+      <View style={styles.inputBarContainer}>
+        <NoteInputBar
+          onSendText={handleSendText}
+          onRecordingStart={handleRecordingStart}
+          onRecordingEnd={handleRecordingEnd}
+          onRecordingCancel={handleRecordingCancel}
+          isRecording={isRecording}
+          recordingDuration={recordingDuration}
+          themedColors={themedColors}
+        />
+      </View>
 
-      {/* Voice Capture Sheet */}
-      <VoiceCaptureSheet
-        visible={showVoiceCapture}
-        onClose={handleCloseVoiceCapture}
-        onCaptureComplete={(uri) => console.log('Captured:', uri)}
-        isRecording={isRecording}
+      {/* Transcription Review Modal */}
+      <TranscriptionReview
+        visible={showTranscriptionReview}
+        transcription={currentTranscription}
         isProcessing={isProcessing}
-        onToggleRecording={handleToggleRecording}
+        onSave={handleSaveTranscription}
+        onReRecord={handleReRecord}
+        onCancel={handleCancelReview}
+        themedColors={themedColors}
       />
 
       {/* Tag Selection Bottom Sheet */}
@@ -426,8 +479,8 @@ export default function HomeScreen() {
         }}
         height={55}
       >
-        <Text style={styles.sheetTitle}>Tag Note</Text>
-        <Text style={styles.sheetSubtitle}>
+        <Text style={[styles.sheetTitle, { color: themedColors.text.primary }]}>Tag Note</Text>
+        <Text style={[styles.sheetSubtitle, { color: themedColors.text.tertiary }]}>
           Choose a tag to organize your note
         </Text>
 
@@ -445,6 +498,7 @@ export default function HomeScreen() {
                       ?.tags?.includes(option.tag) || false
                   : false
               }
+              themedColors={themedColors}
             />
           ))}
         </View>
@@ -459,11 +513,13 @@ function TagOption({
   index,
   onPress,
   isSelected,
+  themedColors,
 }: {
   option: (typeof TAG_OPTIONS)[0];
   index: number;
   onPress: () => void;
   isSelected: boolean;
+  themedColors?: ReturnType<typeof getThemedColors>;
 }) {
   const tagColor = {
     reminder: colors.accent.rose,
@@ -481,8 +537,8 @@ function TagOption({
         style={[
           styles.tagOption,
           {
-            backgroundColor: isSelected ? tagColor.light : colors.neutral[50],
-            borderColor: isSelected ? tagColor.base : colors.neutral[200],
+            backgroundColor: isSelected ? tagColor.light : (themedColors?.surface.secondary || colors.neutral[50]),
+            borderColor: isSelected ? tagColor.base : (themedColors?.surface.border || colors.neutral[200]),
           },
         ]}
         hapticType="light"
@@ -500,8 +556,8 @@ function TagOption({
           />
         </View>
         <View style={styles.tagOptionText}>
-          <Text style={styles.tagOptionTitle}>{option.title}</Text>
-          <Text style={styles.tagOptionDesc}>{option.description}</Text>
+          <Text style={[styles.tagOptionTitle, { color: themedColors?.text.primary || colors.neutral[900] }]}>{option.title}</Text>
+          <Text style={[styles.tagOptionDesc, { color: themedColors?.text.tertiary || colors.neutral[500] }]}>{option.description}</Text>
         </View>
         {isSelected && (
           <Ionicons
@@ -516,17 +572,17 @@ function TagOption({
 }
 
 // Empty State Component
-function EmptyState({ onRecord }: { onRecord: () => void }) {
+function EmptyState({ onRecord, themedColors }: { onRecord: () => void; themedColors?: ReturnType<typeof getThemedColors> }) {
   return (
     <Animated.View
       entering={FadeIn.delay(300)}
       style={styles.emptyState}
     >
-      <View style={styles.emptyIcon}>
+      <View style={[styles.emptyIcon, { backgroundColor: themedColors?.primary[50] || colors.primary[50] }]}>
         <Ionicons name="mic-outline" size={48} color={colors.primary[300]} />
       </View>
-      <Text style={styles.emptyTitle}>No notes yet</Text>
-      <Text style={styles.emptyText}>
+      <Text style={[styles.emptyTitle, { color: themedColors?.text.primary || colors.neutral[900] }]}>No notes yet</Text>
+      <Text style={[styles.emptyText, { color: themedColors?.text.tertiary || colors.neutral[500] }]}>
         Tap the microphone to capture your first note
       </Text>
       <PremiumButton
@@ -545,74 +601,45 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background.primary,
   },
-  header: {
-    paddingTop: layout.statusBarOffset + spacing[4],
+  planCardContainer: {
     paddingHorizontal: spacing[5],
-    paddingBottom: spacing[5],
+    marginBottom: spacing[4],
   },
-  headerContent: {
-    gap: spacing[4],
+  planCard: {
+    borderRadius: borderRadius.xl,
+    overflow: 'hidden',
   },
-  headerTop: {
+  planCardGradient: {
+    padding: spacing[4],
+  },
+  planCardContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: spacing[3],
   },
-  greeting: {
-    fontSize: typography.fontSize.sm,
-    color: 'rgba(255,255,255,0.8)',
-    marginBottom: spacing[1],
-  },
-  title: {
-    fontSize: typography.fontSize['2xl'],
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral[0],
-  },
-  notificationButton: {
+  planCardIcon: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  notificationBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.semantic.error,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
+  planCardText: {
+    flex: 1,
   },
-  notificationBadgeText: {
-    fontSize: 10,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral[0],
-  },
-  planButton: {
-    borderRadius: borderRadius.lg,
-    overflow: 'hidden',
-  },
-  planButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing[4],
-    gap: spacing[2],
-  },
-  planButtonText: {
-    fontSize: typography.fontSize.base,
+  planCardTitle: {
+    fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.semibold,
     color: colors.neutral[0],
-    flex: 1,
+    marginBottom: spacing[1],
+  },
+  planCardSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: 'rgba(255,255,255,0.8)',
   },
   notesSection: {
     flex: 1,
-    paddingTop: spacing[5],
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -635,23 +662,11 @@ const styles = StyleSheet.create({
   },
   notesListContent: {
     paddingHorizontal: spacing[5],
-    paddingBottom: spacing[24],
+    paddingBottom: spacing[20], // Space for input bar + tab bar
   },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingVertical: spacing[4],
-    paddingBottom: spacing[8],
-    alignItems: 'center',
-    backgroundColor: colors.background.primary,
-    borderTopWidth: 1,
-    borderTopColor: colors.neutral[100],
-    ...shadows.lg,
-  },
-  recordButtonContainer: {
-    alignItems: 'center',
+  inputBarContainer: {
+    // Positioned above the tab bar
+    marginBottom: layout.tabBarHeight,
   },
   emptyState: {
     flex: 1,
