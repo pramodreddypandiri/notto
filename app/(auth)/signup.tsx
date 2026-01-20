@@ -1,15 +1,25 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../config/supabase';
 import { useTheme } from '../../context/ThemeContext';
 import { getThemedColors } from '../../theme';
+import authService from '../../services/authService';
 
 export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
 
   // Theme
@@ -41,11 +51,9 @@ export default function SignUpScreen() {
 
       if (error) throw error;
 
-      Alert.alert(
-        'Success',
-        'Account created! Please check your email to verify.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      Alert.alert('Success', 'Account created! Please check your email to verify.', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
@@ -53,17 +61,73 @@ export default function SignUpScreen() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      const result = await authService.signInWithGoogleOAuth();
+      if (result.success) {
+        // @ts-ignore
+        router.replace('/(tabs)');
+      } else if (result.error && result.error !== 'Sign in was cancelled') {
+        Alert.alert('Error', result.error);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to sign in with Google');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: themedColors.background.primary }]}>
       <Text style={[styles.title, { color: themedColors.text.primary }]}>Create Account</Text>
-      <Text style={[styles.subtitle, { color: themedColors.text.tertiary }]}>Sign up to get started</Text>
+      <Text style={[styles.subtitle, { color: themedColors.text.tertiary }]}>
+        Sign up to get started
+      </Text>
 
+      {/* Google Sign-In Button */}
+      <TouchableOpacity
+        style={[
+          styles.socialButton,
+          {
+            backgroundColor: themedColors.surface.primary,
+            borderColor: themedColors.input.border,
+          },
+        ]}
+        onPress={handleGoogleSignIn}
+        disabled={googleLoading}
+      >
+        {googleLoading ? (
+          <ActivityIndicator size="small" color={themedColors.text.primary} />
+        ) : (
+          <>
+            <View style={styles.googleIcon}>
+              <Text style={styles.googleIconText}>G</Text>
+            </View>
+            <Text style={[styles.socialButtonText, { color: themedColors.text.primary }]}>
+              Continue with Google
+            </Text>
+          </>
+        )}
+      </TouchableOpacity>
+
+      {/* Divider */}
+      <View style={styles.dividerContainer}>
+        <View style={[styles.divider, { backgroundColor: themedColors.input.border }]} />
+        <Text style={[styles.dividerText, { color: themedColors.text.tertiary }]}>or</Text>
+        <View style={[styles.divider, { backgroundColor: themedColors.input.border }]} />
+      </View>
+
+      {/* Email/Password Fields */}
       <TextInput
-        style={[styles.input, {
-          backgroundColor: themedColors.input.background,
-          borderColor: themedColors.input.border,
-          color: themedColors.text.primary
-        }]}
+        style={[
+          styles.input,
+          {
+            backgroundColor: themedColors.input.background,
+            borderColor: themedColors.input.border,
+            color: themedColors.text.primary,
+          },
+        ]}
         placeholder="Email"
         placeholderTextColor={themedColors.input.placeholder}
         value={email}
@@ -73,11 +137,14 @@ export default function SignUpScreen() {
       />
 
       <TextInput
-        style={[styles.input, {
-          backgroundColor: themedColors.input.background,
-          borderColor: themedColors.input.border,
-          color: themedColors.text.primary
-        }]}
+        style={[
+          styles.input,
+          {
+            backgroundColor: themedColors.input.background,
+            borderColor: themedColors.input.border,
+            color: themedColors.text.primary,
+          },
+        ]}
         placeholder="Password"
         placeholderTextColor={themedColors.input.placeholder}
         value={password}
@@ -86,11 +153,14 @@ export default function SignUpScreen() {
       />
 
       <TextInput
-        style={[styles.input, {
-          backgroundColor: themedColors.input.background,
-          borderColor: themedColors.input.border,
-          color: themedColors.text.primary
-        }]}
+        style={[
+          styles.input,
+          {
+            backgroundColor: themedColors.input.background,
+            borderColor: themedColors.input.border,
+            color: themedColors.text.primary,
+          },
+        ]}
         placeholder="Confirm Password"
         placeholderTextColor={themedColors.input.placeholder}
         value={confirmPassword}
@@ -98,11 +168,7 @@ export default function SignUpScreen() {
         secureTextEntry
       />
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={handleSignUp}
-        disabled={loading}
-      >
+      <TouchableOpacity style={styles.button} onPress={handleSignUp} disabled={loading}>
         <Text style={styles.buttonText}>
           {loading ? 'Creating account...' : 'Sign Up'}
         </Text>
@@ -134,6 +200,48 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     marginBottom: 32,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 24,
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  googleIconText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#4285F4',
+  },
+  socialButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
   },
   input: {
     backgroundColor: '#fff',

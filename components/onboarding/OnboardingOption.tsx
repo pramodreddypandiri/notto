@@ -2,26 +2,30 @@
  * OnboardingOption - Animated selectable option card
  *
  * Features:
- * - Spring-based selection animation
+ * - Smooth selection animation
  * - Haptic feedback
- * - Beautiful gradient when selected
+ * - Beautiful highlight when selected
  * - Icon and description support
  */
 
 import React from 'react';
-import { StyleSheet, View, Text } from 'react-native';
+import { StyleSheet, View, Text, Pressable } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
   interpolateColor,
-  runOnJS,
+  Easing,
 } from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, typography, spacing, borderRadius, shadows, animation } from '../../theme';
+import { colors, typography, spacing, borderRadius } from '../../theme';
+
+// Smooth timing config
+const SMOOTH_TIMING = {
+  duration: 150,
+  easing: Easing.out(Easing.cubic),
+};
 
 interface OnboardingOptionProps {
   label: string;
@@ -43,32 +47,24 @@ export function OnboardingOption({
   multiSelect = false,
 }: OnboardingOptionProps) {
   const scale = useSharedValue(1);
-  const pressed = useSharedValue(0);
   const selectedAnim = useSharedValue(selected ? 1 : 0);
 
   React.useEffect(() => {
-    selectedAnim.value = withSpring(selected ? 1 : 0, animation.spring.snappy);
+    selectedAnim.value = withTiming(selected ? 1 : 0, SMOOTH_TIMING);
   }, [selected]);
 
-  const triggerHaptic = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const handlePressIn = () => {
+    scale.value = withTiming(0.98, { duration: 100 });
   };
 
-  const gesture = Gesture.Tap()
-    .onBegin(() => {
-      'worklet';
-      scale.value = withSpring(0.97, animation.spring.snappy);
-      pressed.value = withTiming(1, { duration: animation.duration.fast });
-    })
-    .onFinalize((_, success) => {
-      'worklet';
-      scale.value = withSpring(1, animation.spring.snappy);
-      pressed.value = withTiming(0, { duration: animation.duration.fast });
-      if (success) {
-        runOnJS(triggerHaptic)();
-        runOnJS(onSelect)();
-      }
-    });
+  const handlePressOut = () => {
+    scale.value = withTiming(1, { duration: 100 });
+  };
+
+  const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onSelect();
+  };
 
   const containerStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -82,24 +78,24 @@ export function OnboardingOption({
       [0, 1],
       [colors.neutral[200], colors.primary[400]]
     ),
-    borderWidth: selectedAnim.value > 0.5 ? 2 : 1.5,
   }));
 
   const checkStyle = useAnimatedStyle(() => ({
     opacity: selectedAnim.value,
-    transform: [
-      { scale: selectedAnim.value },
-      { rotate: `${(1 - selectedAnim.value) * -90}deg` },
-    ],
+    transform: [{ scale: selectedAnim.value }],
   }));
 
   return (
-    <GestureDetector gesture={gesture}>
+    <Pressable
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={handlePress}
+    >
       <Animated.View style={[styles.container, containerStyle]}>
         <View style={styles.content}>
           {/* Icon/Emoji */}
           {(emoji || icon) && (
-            <View style={styles.iconContainer}>
+            <View style={[styles.iconContainer, selected && styles.iconContainerSelected]}>
               {emoji ? (
                 <Text style={styles.emoji}>{emoji}</Text>
               ) : icon ? (
@@ -136,7 +132,7 @@ export function OnboardingOption({
           )}
         </Animated.View>
       </Animated.View>
-    </GestureDetector>
+    </Pressable>
   );
 }
 
@@ -148,6 +144,7 @@ const styles = StyleSheet.create({
     padding: spacing[4],
     borderRadius: borderRadius.lg,
     marginBottom: spacing[3],
+    borderWidth: 1.5,
     shadowColor: colors.neutral[900],
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -167,6 +164,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: spacing[3],
+  },
+  iconContainerSelected: {
+    backgroundColor: colors.primary[100],
   },
   emoji: {
     fontSize: 24,

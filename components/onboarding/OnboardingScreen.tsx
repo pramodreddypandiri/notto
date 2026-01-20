@@ -2,7 +2,7 @@
  * OnboardingScreen - Container for each onboarding step
  *
  * Features:
- * - Animated entrance/exit
+ * - Smooth animated entrance
  * - Consistent layout
  * - Keyboard-aware scrolling
  */
@@ -19,9 +19,7 @@ import {
 } from 'react-native';
 import Animated, {
   FadeIn,
-  FadeOut,
-  SlideInRight,
-  SlideOutLeft,
+  FadeInRight,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, typography, spacing, textPresets } from '../../theme';
@@ -58,7 +56,7 @@ export function OnboardingScreen({
           {/* Illustration */}
           {illustration && (
             <Animated.View
-              entering={FadeIn.delay(200).duration(400)}
+              entering={FadeIn.duration(300).delay(50)}
               style={styles.illustrationContainer}
             >
               {illustration}
@@ -67,7 +65,7 @@ export function OnboardingScreen({
 
           {/* Header */}
           <Animated.View
-            entering={SlideInRight.delay(100).springify().damping(15)}
+            entering={FadeInRight.duration(250).delay(100)}
             style={styles.header}
           >
             <Text style={styles.title}>{title}</Text>
@@ -76,7 +74,7 @@ export function OnboardingScreen({
 
           {/* Content */}
           <Animated.View
-            entering={SlideInRight.delay(200).springify().damping(15)}
+            entering={FadeInRight.duration(250).delay(150)}
             style={styles.content}
           >
             {children}
@@ -86,7 +84,7 @@ export function OnboardingScreen({
         {/* Footer */}
         {footer && (
           <Animated.View
-            entering={FadeIn.delay(400).duration(300)}
+            entering={FadeIn.duration(200).delay(200)}
             style={styles.footer}
           >
             {footer}
