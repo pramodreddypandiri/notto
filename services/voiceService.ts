@@ -1,5 +1,9 @@
 import { Audio } from 'expo-av';
 import { ENV } from '../config/env';
+import speechRecognitionService from './speechRecognitionService';
+
+// Transcription method preference
+export type TranscriptionMethod = 'native' | 'whisper' | 'auto';
 
 // Placeholder for empty/garbage transcription
 export const EMPTY_TRANSCRIPTION_PLACEHOLDER = '___EMPTY_RECORDING___';
@@ -243,9 +247,36 @@ class VoiceService {
   }
 
   /**
-   * Convert audio file to text using OpenAI Whisper API
+   * Check if native speech recognition is available
    */
-  async transcribeAudio(audioUri: string): Promise<string> {
+  async isNativeSpeechAvailable(): Promise<boolean> {
+    return await speechRecognitionService.isAvailable();
+  }
+
+  /**
+   * Get the recommended transcription method
+   * Returns 'native' if available (free), otherwise 'whisper' if API key configured
+   */
+  async getRecommendedMethod(): Promise<TranscriptionMethod | null> {
+    // Check native first (free)
+    const nativeAvailable = await this.isNativeSpeechAvailable();
+    if (nativeAvailable) {
+      return 'native';
+    }
+
+    // Fall back to Whisper if configured
+    if (ENV.OPENAI_API_KEY && ENV.OPENAI_API_KEY !== 'sk-YOUR_OPENAI_API_KEY_HERE') {
+      return 'whisper';
+    }
+
+    return null;
+  }
+
+  /**
+   * Convert audio file to text using OpenAI Whisper API
+   * This is the FALLBACK method when native speech recognition is not available
+   */
+  async transcribeAudioWithWhisper(audioUri: string): Promise<string> {
     try {
       // Check if API key is configured
       if (!ENV.OPENAI_API_KEY || ENV.OPENAI_API_KEY === 'sk-YOUR_OPENAI_API_KEY_HERE') {
@@ -288,9 +319,43 @@ class VoiceService {
 
       return data.text;
     } catch (error) {
-      console.error('Failed to transcribe audio:', error);
+      console.error('Failed to transcribe audio with Whisper:', error);
       throw error;
     }
+  }
+
+  /**
+   * Convert audio file to text - uses best available method
+   * Priority: Native speech recognition (free) > Whisper API (paid)
+   */
+  async transcribeAudio(audioUri: string): Promise<string> {
+    const method = await this.getRecommendedMethod();
+
+    if (method === 'whisper') {
+      // Use Whisper API as fallback
+      console.log('Using Whisper API for transcription (native not available)');
+      return this.transcribeAudioWithWhisper(audioUri);
+    }
+
+    // If native is available, we should use real-time transcription instead
+    // This method is primarily for Whisper fallback now
+    if (method === 'native') {
+      console.warn('Native speech recognition available - use startRealtimeTranscription() instead for better UX');
+      // Fall through to Whisper if API key available
+      if (ENV.OPENAI_API_KEY && ENV.OPENAI_API_KEY !== 'sk-YOUR_OPENAI_API_KEY_HERE') {
+        return this.transcribeAudioWithWhisper(audioUri);
+      }
+    }
+
+    throw new Error('No transcription method available. Native speech recognition not supported and OpenAI API key not configured.');
+  }
+
+  /**
+   * Get the speech recognition service for real-time transcription
+   * Use this in components for native speech recognition
+   */
+  getSpeechRecognitionService() {
+    return speechRecognitionService;
   }
 }
 

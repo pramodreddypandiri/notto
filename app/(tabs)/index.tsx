@@ -44,6 +44,7 @@ import TopBar from '../../components/common/TopBar';
 
 // Services
 import voiceService, { isGarbageTranscription, EMPTY_TRANSCRIPTION_PLACEHOLDER } from '../../services/voiceService';
+import speechRecognitionService, { useSpeechRecognitionEvent } from '../../services/speechRecognitionService';
 import { createNoteWithReminder, getNotes, updateNoteTags, deleteNote } from '../../services/notesService';
 import soundService from '../../services/soundService';
 import notificationService from '../../services/notificationService';
@@ -142,6 +143,8 @@ export default function HomeScreen() {
   const [currentTranscription, setCurrentTranscription] = useState('');
   const [currentAudioUri, setCurrentAudioUri] = useState<string | null>(null);
   const [externalRecordingStart, setExternalRecordingStart] = useState(false);
+  const [useNativeSpeech, setUseNativeSpeech] = useState(false);
+  const [realtimeTranscript, setRealtimeTranscript] = useState('');
 
   // Tag modal state
   const [showTagSheet, setShowTagSheet] = useState(false);
@@ -168,9 +171,72 @@ export default function HomeScreen() {
     loadNotes();
     soundService.initialize();
 
+    // Check if native speech recognition is available
+    const checkNativeSpeech = async () => {
+      const available = await speechRecognitionService.isAvailable();
+      setUseNativeSpeech(available);
+      console.log('Native speech recognition available:', available);
+    };
+    checkNativeSpeech();
+
     // Debug: Log scheduled notifications on app load
     notificationService.debugLogScheduledNotifications();
   }, []);
+
+  // Whisper fallback handler
+  const handleWhisperFallback = async (audioUri: string) => {
+    try {
+      const transcript = await voiceService.transcribeAudioWithWhisper(audioUri);
+      if (isGarbageTranscription(transcript)) {
+        setCurrentTranscription(EMPTY_TRANSCRIPTION_PLACEHOLDER);
+      } else {
+        setCurrentTranscription(transcript);
+      }
+    } catch (error) {
+      console.error('Whisper fallback failed:', error);
+      Alert.alert('Error', 'Failed to transcribe audio. Please try again.');
+      setShowTranscriptionReview(false);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Native speech recognition event listeners
+  useSpeechRecognitionEvent('result', (event) => {
+    if (event.results && event.results.length > 0) {
+      // Get the last result (most recent)
+      const result = event.results[event.results.length - 1];
+      if (result && result.transcript) {
+        setRealtimeTranscript(result.transcript);
+        // If final result, set as current transcription
+        if (event.isFinal) {
+          const transcript = result.transcript;
+          if (isGarbageTranscription(transcript)) {
+            setCurrentTranscription(EMPTY_TRANSCRIPTION_PLACEHOLDER);
+          } else {
+            setCurrentTranscription(transcript);
+          }
+          setIsProcessing(false);
+        }
+      }
+    }
+  });
+
+  useSpeechRecognitionEvent('end', () => {
+    console.log('Speech recognition ended');
+  });
+
+  useSpeechRecognitionEvent('error', (event) => {
+    console.error('Speech recognition error:', event);
+    // Fallback to Whisper if native fails and we have audio
+    if (currentAudioUri) {
+      console.log('Falling back to Whisper API...');
+      handleWhisperFallback(currentAudioUri);
+    } else {
+      setIsProcessing(false);
+      Alert.alert('Error', 'Speech recognition failed. Please try again.');
+    }
+  });
 
   const loadNotes = async () => {
     try {
@@ -228,9 +294,22 @@ export default function HomeScreen() {
   // Voice recording handlers (hold-to-record flow)
   const handleRecordingStart = async () => {
     try {
+      // Reset transcription state
+      setRealtimeTranscript('');
+      setCurrentTranscription('');
+
+      // Start audio recording (for backup/storage)
       await voiceService.startRecording();
       await soundService.playRecordStart();
       setIsRecording(true);
+
+      // If native speech recognition is available, start it for real-time transcription
+      if (useNativeSpeech) {
+        await speechRecognitionService.startListening({
+          onStart: () => console.log('Native speech recognition started'),
+          onError: (error) => console.error('Native speech error:', error),
+        });
+      }
     } catch (error) {
       console.error('Failed to start recording:', error);
       Alert.alert('Error', 'Failed to start recording. Please check permissions.');
@@ -246,26 +325,45 @@ export default function HomeScreen() {
     setShowTranscriptionReview(true);
 
     try {
+      // Stop audio recording
       const audioUri = await voiceService.stopRecording();
       await soundService.playRecordStop();
 
       if (audioUri) {
         setCurrentAudioUri(audioUri);
+      }
 
-        if (DEMO_MODE) {
-          // Simulate transcription
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-          setCurrentTranscription('This is a demo transcription of your voice note.');
+      if (DEMO_MODE) {
+        // Simulate transcription
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        setCurrentTranscription('This is a demo transcription of your voice note.');
+        setIsProcessing(false);
+        return;
+      }
+
+      // Stop native speech recognition if it was running
+      if (useNativeSpeech) {
+        await speechRecognitionService.stopListening();
+
+        // If we got a real-time transcript, use it (already set by event listener)
+        if (realtimeTranscript && !isGarbageTranscription(realtimeTranscript)) {
+          setCurrentTranscription(realtimeTranscript);
+          setIsProcessing(false);
+          console.log('Using native speech recognition result');
+          return;
+        }
+      }
+
+      // Fallback to Whisper API if native didn't produce results
+      if (audioUri) {
+        console.log('Using Whisper API for transcription');
+        const transcript = await voiceService.transcribeAudioWithWhisper(audioUri);
+
+        // Check if transcription is garbage (empty audio, noise, non-English hallucination)
+        if (isGarbageTranscription(transcript)) {
+          setCurrentTranscription(EMPTY_TRANSCRIPTION_PLACEHOLDER);
         } else {
-          // Transcribe using OpenAI Whisper
-          const transcript = await voiceService.transcribeAudio(audioUri);
-
-          // Check if transcription is garbage (empty audio, noise, non-English hallucination)
-          if (isGarbageTranscription(transcript)) {
-            setCurrentTranscription(EMPTY_TRANSCRIPTION_PLACEHOLDER);
-          } else {
-            setCurrentTranscription(transcript);
-          }
+          setCurrentTranscription(transcript);
         }
       }
     } catch (error) {
@@ -278,11 +376,16 @@ export default function HomeScreen() {
     }
   };
 
-  const handleRecordingCancel = () => {
+  const handleRecordingCancel = async () => {
     if (isRecording) {
       voiceService.cancelRecording();
+      // Also stop native speech recognition if running
+      if (useNativeSpeech) {
+        await speechRecognitionService.abort();
+      }
       setIsRecording(false);
       setExternalRecordingStart(false);
+      setRealtimeTranscript('');
     }
   };
 

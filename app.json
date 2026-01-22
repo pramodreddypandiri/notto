@@ -11,7 +11,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.notesapp.notes",
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "This app uses speech recognition to convert your voice notes to text.",
+        "NSMicrophoneUsageDescription": "This app needs microphone access to record voice notes."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -43,7 +47,8 @@
           }
         }
       ],
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "expo-speech-recognition"
     ],
     "experiments": {
       "typedRoutes": true,
