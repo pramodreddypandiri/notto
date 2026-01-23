@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../config/supabase';
 import { useTheme } from '../../context/ThemeContext';
 import { getThemedColors } from '../../theme';
@@ -19,11 +20,22 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
   const router = useRouter();
 
   // Theme
   const { isDark } = useTheme();
   const themedColors = getThemedColors(isDark);
+
+  // Check Apple Sign In availability on mount
+  useEffect(() => {
+    const checkAppleSignIn = async () => {
+      const available = await authService.isAppleSignInAvailable();
+      setAppleSignInAvailable(available);
+    };
+    checkAppleSignIn();
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -66,12 +78,52 @@ export default function LoginScreen() {
     }
   };
 
+  const handleAppleSignIn = async () => {
+    setAppleLoading(true);
+    try {
+      const result = await authService.signInWithApple();
+      if (result.success) {
+        // @ts-ignore
+        router.replace('/(tabs)');
+      } else if (result.error && result.error !== 'Sign in was cancelled') {
+        Alert.alert('Error', result.error);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to sign in with Apple');
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: themedColors.background.primary }]}>
       <Text style={[styles.title, { color: themedColors.text.primary }]}>Welcome Back</Text>
       <Text style={[styles.subtitle, { color: themedColors.text.tertiary }]}>
         Sign in to your account
       </Text>
+
+      {/* Apple Sign-In Button (iOS only) */}
+      {appleSignInAvailable && (
+        <TouchableOpacity
+          style={[
+            styles.socialButton,
+            styles.appleButton,
+          ]}
+          onPress={handleAppleSignIn}
+          disabled={appleLoading}
+        >
+          {appleLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="logo-apple" size={20} color="#fff" style={styles.appleIcon} />
+              <Text style={[styles.socialButtonText, styles.appleButtonText]}>
+                Continue with Apple
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      )}
 
       {/* Google Sign-In Button */}
       <TouchableOpacity
@@ -181,7 +233,17 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 24,
+    marginBottom: 12,
+  },
+  appleButton: {
+    backgroundColor: '#000',
+    borderColor: '#000',
+  },
+  appleIcon: {
+    marginRight: 12,
+  },
+  appleButtonText: {
+    color: '#fff',
   },
   googleIcon: {
     width: 20,
@@ -206,6 +268,7 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 12,
     marginBottom: 24,
   },
   divider: {

@@ -1,15 +1,18 @@
-// Dynamic import to handle when native module is not available (Expo Go)
-let ExpoSpeechRecognitionModule: any = null;
-let useSpeechRecognitionEvent: any = () => {}; // No-op fallback
-
-// Try to load the native module
-try {
-  const speechRecognition = require('expo-speech-recognition');
-  ExpoSpeechRecognitionModule = speechRecognition.ExpoSpeechRecognitionModule;
-  useSpeechRecognitionEvent = speechRecognition.useSpeechRecognitionEvent;
-} catch (error) {
-  console.log('expo-speech-recognition not available (running in Expo Go?) - will use Whisper API fallback');
-}
+/**
+ * Speech Recognition Service (Stub for Expo Go)
+ *
+ * This is a stub implementation that always returns "not available".
+ * The app will fall back to using Whisper API for transcription.
+ *
+ * To enable native speech recognition:
+ * 1. Create a development build: npx expo prebuild && npx expo run:ios
+ * 2. Uncomment the expo-speech-recognition imports and implementation
+ *
+ * Native speech recognition benefits:
+ * - Free (no API costs)
+ * - Real-time transcription
+ * - Works offline (iOS)
+ */
 
 export interface TranscriptionResult {
   text: string;
@@ -24,181 +27,82 @@ export interface SpeechRecognitionCallbacks {
   onEnd?: () => void;
 }
 
+/**
+ * Stub implementation for Expo Go compatibility
+ * All methods return false/no-op to signal Whisper API should be used
+ */
 class SpeechRecognitionService {
   private isListening: boolean = false;
-  private callbacks: SpeechRecognitionCallbacks = {};
-  private isModuleAvailable: boolean = ExpoSpeechRecognitionModule !== null;
 
   /**
-   * Request speech recognition permissions
+   * Check if the native module is available
+   * Returns false in Expo Go
    */
-  async requestPermissions(): Promise<boolean> {
-    try {
-      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      return result.granted;
-    } catch (error) {
-      console.error('Error requesting speech recognition permissions:', error);
-      return false;
-    }
+  isModuleAvailable(): boolean {
+    return false;
   }
 
   /**
-   * Check if speech recognition permissions are granted
-   */
-  async hasPermissions(): Promise<boolean> {
-    try {
-      const result = await ExpoSpeechRecognitionModule.getPermissionsAsync();
-      return result.granted;
-    } catch (error) {
-      console.error('Error checking speech recognition permissions:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Check if speech recognition is available on this device
+   * Check if speech recognition is available
+   * Returns false in Expo Go
    */
   async isAvailable(): Promise<boolean> {
-    try {
-      const available = await ExpoSpeechRecognitionModule.isRecognitionAvailable();
-      return available;
-    } catch (error) {
-      console.error('Error checking speech recognition availability:', error);
-      return false;
-    }
+    return false;
   }
 
   /**
-   * Start listening for speech with real-time transcription
+   * Request permissions - no-op in Expo Go
    */
-  async startListening(callbacks: SpeechRecognitionCallbacks = {}): Promise<boolean> {
-    try {
-      // Check permissions first
-      const hasPermission = await this.hasPermissions();
-      if (!hasPermission) {
-        const granted = await this.requestPermissions();
-        if (!granted) {
-          callbacks.onError?.('Speech recognition permission not granted');
-          return false;
-        }
-      }
-
-      // Check availability
-      const available = await this.isAvailable();
-      if (!available) {
-        callbacks.onError?.('Speech recognition is not available on this device');
-        return false;
-      }
-
-      this.callbacks = callbacks;
-      this.isListening = true;
-
-      // Start speech recognition
-      ExpoSpeechRecognitionModule.start({
-        lang: 'en-US',
-        interimResults: true, // Get results while speaking
-        maxAlternatives: 1,
-        continuous: true, // Keep listening until stopped
-        requiresOnDeviceRecognition: false, // Use on-device if available, fallback to cloud
-        addsPunctuation: true, // Auto-add punctuation
-        contextualStrings: [
-          // Help recognition with common reminder phrases
-          'remind me',
-          'don\'t forget',
-          'tomorrow',
-          'next week',
-          'meeting',
-          'call',
-          'email',
-        ],
-      });
-
-      callbacks.onStart?.();
-      console.log('Speech recognition started');
-      return true;
-    } catch (error) {
-      console.error('Failed to start speech recognition:', error);
-      callbacks.onError?.(`Failed to start: ${error}`);
-      return false;
-    }
+  async requestPermissions(): Promise<boolean> {
+    return false;
   }
 
   /**
-   * Stop listening and get final transcription
+   * Check permissions - no-op in Expo Go
+   */
+  async hasPermissions(): Promise<boolean> {
+    return false;
+  }
+
+  /**
+   * Start listening - no-op in Expo Go
+   */
+  async startListening(_callbacks: SpeechRecognitionCallbacks = {}): Promise<boolean> {
+    console.log('[SpeechRecognition] Not available in Expo Go - using Whisper API');
+    return false;
+  }
+
+  /**
+   * Stop listening - no-op
    */
   async stopListening(): Promise<void> {
-    try {
-      if (!this.isListening) {
-        return;
-      }
-
-      ExpoSpeechRecognitionModule.stop();
-      this.isListening = false;
-      console.log('Speech recognition stopped');
-    } catch (error) {
-      console.error('Failed to stop speech recognition:', error);
-    }
+    this.isListening = false;
   }
 
   /**
-   * Abort listening without processing
+   * Abort listening - no-op
    */
   async abort(): Promise<void> {
-    try {
-      ExpoSpeechRecognitionModule.abort();
-      this.isListening = false;
-      console.log('Speech recognition aborted');
-    } catch (error) {
-      console.error('Failed to abort speech recognition:', error);
-    }
+    this.isListening = false;
   }
 
-  /**
-   * Get current listening status
-   */
   getIsListening(): boolean {
     return this.isListening;
   }
 
-  /**
-   * Handle recognition result event
-   * Call this from the component using useSpeechRecognitionEvent
-   */
-  handleResult(event: { results: Array<{ transcript: string; confidence: number }[]>; isFinal: boolean }): void {
-    if (event.results && event.results.length > 0) {
-      const result = event.results[event.results.length - 1];
-      if (result && result.length > 0) {
-        this.callbacks.onResult?.({
-          text: result[0].transcript,
-          isFinal: event.isFinal,
-          confidence: result[0].confidence,
-        });
-      }
-    }
-  }
-
-  /**
-   * Handle recognition error event
-   */
-  handleError(event: { error: string; message?: string }): void {
-    console.error('Speech recognition error:', event);
-    this.isListening = false;
-    this.callbacks.onError?.(event.message || event.error);
-  }
-
-  /**
-   * Handle recognition end event
-   */
-  handleEnd(): void {
-    this.isListening = false;
-    this.callbacks.onEnd?.();
+  getCallbacks(): SpeechRecognitionCallbacks {
+    return {};
   }
 }
 
-// Export singleton instance
+// Singleton instance
 export const speechRecognitionService = new SpeechRecognitionService();
 
-// Export hook for use in components
-export { useSpeechRecognitionEvent };
+/**
+ * Hook for speech recognition events - no-op in Expo Go
+ */
+export const useSpeechRecognitionEvent = (_eventName: string, _callback: (event: any) => void): void => {
+  // No-op - native module not available in Expo Go
+};
 
 export default speechRecognitionService;

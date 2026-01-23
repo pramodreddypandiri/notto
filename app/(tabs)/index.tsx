@@ -48,6 +48,7 @@ import speechRecognitionService, { useSpeechRecognitionEvent } from '../../servi
 import { createNoteWithReminder, getNotes, updateNoteTags, deleteNote } from '../../services/notesService';
 import soundService from '../../services/soundService';
 import notificationService from '../../services/notificationService';
+import { getUserProfile } from '../../services/profileService';
 
 // Demo mode
 const DEMO_MODE = false;
@@ -150,6 +151,9 @@ export default function HomeScreen() {
   const [showTagSheet, setShowTagSheet] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
+  // Onboarding state
+  const [showOnboardingBanner, setShowOnboardingBanner] = useState(false);
+
   // Recording duration timer
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | undefined;
@@ -178,6 +182,15 @@ export default function HomeScreen() {
       console.log('Native speech recognition available:', available);
     };
     checkNativeSpeech();
+
+    // Check if user needs onboarding
+    const checkOnboarding = async () => {
+      const profile = await getUserProfile();
+      if (profile && !profile.onboarding_completed) {
+        setShowOnboardingBanner(true);
+      }
+    };
+    checkOnboarding();
 
     // Debug: Log scheduled notifications on app load
     notificationService.debugLogScheduledNotifications();
@@ -527,12 +540,50 @@ export default function HomeScreen() {
     router.push('/(tabs)/plans');
   };
 
+  const navigateToOnboarding = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push('/onboarding');
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: themedColors.background.primary }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Top Bar with greeting and profile */}
       <TopBar themedColors={themedColors} />
+
+      {/* Onboarding Banner for new users */}
+      {showOnboardingBanner && (
+        <Animated.View
+          entering={FadeInDown.delay(200).springify()}
+          style={styles.onboardingBanner}
+        >
+          <AnimatedPressable
+            onPress={navigateToOnboarding}
+            style={styles.onboardingCard}
+            hapticType="medium"
+            scaleIntensity="subtle"
+          >
+            <LinearGradient
+              colors={[colors.accent.violet.base, colors.accent.violet.dark] as [string, string]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.onboardingCardGradient}
+            >
+              <View style={styles.onboardingCardContent}>
+                <View style={styles.onboardingCardIcon}>
+                  <Ionicons name="person-add" size={24} color={colors.neutral[0]} />
+                </View>
+                <View style={styles.onboardingCardText}>
+                  <Text style={styles.onboardingCardTitle}>Personalize Your Experience</Text>
+                  <Text style={styles.onboardingCardSubtitle}>Take a quick quiz to get better recommendations</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.neutral[0]} />
+              </View>
+            </LinearGradient>
+          </AnimatedPressable>
+        </Animated.View>
+      )}
 
       {/* Plan Weekend Card */}
       <View style={styles.planCardContainer}>
@@ -758,6 +809,43 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.primary,
+  },
+  onboardingBanner: {
+    paddingHorizontal: spacing[5],
+    marginBottom: spacing[3],
+  },
+  onboardingCard: {
+    borderRadius: borderRadius.xl,
+    overflow: 'hidden',
+  },
+  onboardingCardGradient: {
+    padding: spacing[4],
+  },
+  onboardingCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  onboardingCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  onboardingCardText: {
+    flex: 1,
+  },
+  onboardingCardTitle: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.neutral[0],
+    marginBottom: spacing[1],
+  },
+  onboardingCardSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: 'rgba(255,255,255,0.8)',
   },
   planCardContainer: {
     paddingHorizontal: spacing[5],
