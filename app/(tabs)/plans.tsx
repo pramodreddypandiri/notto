@@ -42,7 +42,7 @@ import { supabase } from '../../config/supabase';
 import soundService from '../../services/soundService';
 
 // Demo mode
-const DEMO_MODE = true;
+const DEMO_MODE = false;
 
 interface Activity {
   time: string;
