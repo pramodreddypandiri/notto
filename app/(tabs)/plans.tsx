@@ -1,15 +1,14 @@
 /**
- * Plans Screen - Premium weekend plans with magic generation experience
+ * Plans Screen - Place suggestions with Like/Dislike feedback
  *
  * Features:
- * - Engaging plan generation loading animation
- * - Animated plan cards with timeline visualization
- * - Interactive feedback system
- * - Pull-to-refresh
- * - Empty state with call-to-action
+ * - Two sections: Going (liked places) and Suggestions
+ * - Like/Dislike feedback for learning user preferences
+ * - Pull-to-refresh for new suggestions
+ * - AI-powered personalized suggestions
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,6 +16,7 @@ import {
   RefreshControl,
   StatusBar,
   Alert,
+  SectionList,
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,165 +30,94 @@ import { colors, typography, spacing, borderRadius, shadows, getThemedColors } f
 import { useTheme } from '../../context/ThemeContext';
 
 // Components
-import AnimatedPressable from '../../components/ui/AnimatedPressable';
 import PremiumButton from '../../components/ui/PremiumButton';
-import PlanCard from '../../components/plans/PlanCard';
+import { PlaceCard } from '../../components/plans/PlaceCard';
 import { PlanGenerationLoader } from '../../components/plans/PlanGenerationLoader';
 import TopBar from '../../components/common/TopBar';
 
 // Services
-import { createWeekendPlans, submitFeedback } from '../../services/plansService';
+import {
+  createPlaceSuggestions,
+  getSuggestions,
+  getLikedPlaces,
+  updateSuggestionStatus,
+  removeLikedPlace,
+  StoredPlaceSuggestion,
+} from '../../services/plansService';
 import { supabase } from '../../config/supabase';
 import soundService from '../../services/soundService';
 
-// Demo mode
-const DEMO_MODE = false;
-
-interface Activity {
-  time: string;
-  name: string;
-  address: string;
-  duration: string;
-  type?: string;
-}
-
-interface Plan {
-  id: string;
-  plan_data: {
-    title: string;
-    date: string;
-    startTime: string;
-    endTime: string;
-    activities: Activity[];
-    reasoning: string;
-    totalDistance?: string;
-  };
-}
-
-const DEMO_PLANS: Plan[] = [
-  {
-    id: '1',
-    plan_data: {
-      title: 'Saturday Evening Adventure',
-      date: 'Saturday',
-      startTime: '6:00 PM',
-      endTime: '10:00 PM',
-      activities: [
-        {
-          time: '6:00 PM',
-          name: 'Lucky Strike Bowling',
-          address: '123 Main St, Downtown',
-          duration: '1.5 hours',
-          type: 'activity',
-        },
-        {
-          time: '7:45 PM',
-          name: 'Casa Luna Mexican Restaurant',
-          address: '456 Oak Ave',
-          duration: '1.5 hours',
-          type: 'dining',
-        },
-        {
-          time: '9:30 PM',
-          name: 'Sweet Treats Dessert Bar',
-          address: '789 Park Blvd',
-          duration: '30 minutes',
-          type: 'dessert',
-        },
-      ],
-      reasoning:
-        'Based on your interest in bowling and Mexican food, I\'ve crafted an evening that combines active fun with delicious dining. The timeline allows for a relaxed pace with short drives between venues.',
-      totalDistance: '2.3 miles',
-    },
-  },
-  {
-    id: '2',
-    plan_data: {
-      title: 'Sunday Afternoon Chill',
-      date: 'Sunday',
-      startTime: '2:00 PM',
-      endTime: '6:00 PM',
-      activities: [
-        {
-          time: '2:00 PM',
-          name: 'Retro Lanes Bowling',
-          address: '321 Center St',
-          duration: '2 hours',
-          type: 'activity',
-        },
-        {
-          time: '4:15 PM',
-          name: 'Taco Paradise',
-          address: '654 Elm St',
-          duration: '1.5 hours',
-          type: 'dining',
-        },
-      ],
-      reasoning:
-        'A more relaxed Sunday option with your favorite activities. This plan gives you extra bowling time and ends earlier so you\'re refreshed for the week ahead.',
-      totalDistance: '1.8 miles',
-    },
-  },
-];
-
 export default function PlansScreen() {
-  // Theme
   const { isDark } = useTheme();
   const themedColors = getThemedColors(isDark);
 
-  const [plans, setPlans] = useState<Plan[]>([]);
+  const [suggestions, setSuggestions] = useState<StoredPlaceSuggestion[]>([]);
+  const [likedPlaces, setLikedPlaces] = useState<StoredPlaceSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
-  const handleGeneratePlans = async () => {
+  // Load existing suggestions and liked places on mount
+  useEffect(() => {
+    loadPlaces();
+  }, []);
+
+  const loadPlaces = async () => {
+    try {
+      const [suggestionsData, likedData] = await Promise.all([
+        getSuggestions(),
+        getLikedPlaces(),
+      ]);
+      setSuggestions(suggestionsData);
+      setLikedPlaces(likedData);
+    } catch (error) {
+      console.error('Failed to load places:', error);
+    } finally {
+      setInitialLoading(false);
+    }
+  };
+
+  const handleGenerateSuggestions = async () => {
     setShowGenerator(true);
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      if (DEMO_MODE) {
-        // The loader handles its own timing, we just wait
-        await new Promise((resolve) => setTimeout(resolve, 7000));
-        setPlans(DEMO_PLANS);
-        await soundService.playPlanReady();
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
-        // Get user location from preferences
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        const { data: prefs } = await supabase
-          .from('user_preferences')
-          .select('*')
-          .eq('user_id', user?.id)
-          .single();
+      // Get user location from preferences
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const { data: prefs } = await supabase
+        .from('user_preferences')
+        .select('*')
+        .eq('user_id', user?.id)
+        .single();
 
-        if (!prefs?.location_city) {
-          Alert.alert(
-            'Location Required',
-            'Please set your location in Settings first'
-          );
-          setShowGenerator(false);
-          setLoading(false);
-          return;
-        }
-
-        const userLocation = {
-          lat: prefs.location_lat,
-          lng: prefs.location_lng,
-          city: prefs.location_city,
-        };
-
-        const newPlans = await createWeekendPlans(userLocation);
-        setPlans(newPlans);
-        await soundService.playPlanReady();
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (!prefs?.location_city) {
+        Alert.alert(
+          'Location Required',
+          'Please set your location in Settings first'
+        );
+        setShowGenerator(false);
+        setLoading(false);
+        return;
       }
+
+      const userLocation = {
+        lat: prefs.location_lat,
+        lng: prefs.location_lng,
+        city: prefs.location_city,
+      };
+
+      const newSuggestions = await createPlaceSuggestions(userLocation);
+      setSuggestions(prev => [...newSuggestions, ...prev]);
+      await soundService.playPlanReady();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      console.error('Failed to generate plans:', error);
+      console.error('Failed to generate suggestions:', error);
       await soundService.playError();
-      Alert.alert('Error', 'Failed to generate plans. Please try again.');
+      Alert.alert('Error', 'Failed to generate suggestions. Please try again.');
     } finally {
       setShowGenerator(false);
       setLoading(false);
@@ -196,47 +125,75 @@ export default function PlansScreen() {
   };
 
   const handleRefresh = useCallback(async () => {
-    if (plans.length === 0) return;
-
     setRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    // Simulate refresh
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setRefreshing(false);
-  }, [plans]);
-
-  const handleFeedback = async (planId: string, rating: 'up' | 'down') => {
     try {
-      if (DEMO_MODE) {
-        // Just show confirmation in demo mode
-        return;
-      }
-      await submitFeedback(planId, rating);
+      await loadPlaces();
     } catch (error) {
-      console.error('Failed to submit feedback:', error);
+      console.error('Failed to refresh:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  const handleLike = async (id: string) => {
+    try {
+      const updated = await updateSuggestionStatus(id, 'liked');
+      // Move from suggestions to liked
+      setSuggestions(prev => prev.filter(s => s.id !== id));
+      setLikedPlaces(prev => [updated, ...prev]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error('Failed to like place:', error);
     }
   };
 
-  const handleRegenerate = () => {
-    setPlans([]);
-    handleGeneratePlans();
+  const handleDislike = async (id: string) => {
+    try {
+      await updateSuggestionStatus(id, 'disliked');
+      // Remove from suggestions
+      setSuggestions(prev => prev.filter(s => s.id !== id));
+    } catch (error) {
+      console.error('Failed to dislike place:', error);
+    }
   };
+
+  const handleRemoveLiked = async (id: string) => {
+    try {
+      await removeLikedPlace(id);
+      setLikedPlaces(prev => prev.filter(s => s.id !== id));
+    } catch (error) {
+      console.error('Failed to remove liked place:', error);
+    }
+  };
+
+  // Prepare sections for SectionList
+  const sections = [
+    ...(likedPlaces.length > 0
+      ? [{ title: 'Going', data: likedPlaces, type: 'going' as const }]
+      : []),
+    ...(suggestions.length > 0
+      ? [{ title: 'Suggestions', data: suggestions, type: 'suggestion' as const }]
+      : []),
+  ];
+
+  const isEmpty = likedPlaces.length === 0 && suggestions.length === 0;
 
   return (
     <View style={[styles.container, { backgroundColor: themedColors.background.primary }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      {/* Top Bar with greeting and profile */}
+      {/* Top Bar */}
       <TopBar themedColors={themedColors} />
 
       {/* Page Title */}
       <View style={styles.pageTitleContainer}>
-        <Text style={[styles.pageTitle, { color: themedColors.text.primary }]}>Weekend Plans</Text>
+        <Text style={[styles.pageTitle, { color: themedColors.text.primary }]}>Places</Text>
         <Text style={[styles.pageSubtitle, { color: themedColors.text.tertiary }]}>
-          {plans.length > 0
-            ? `${plans.length} plans ready for you`
-            : 'Let\'s plan something amazing'}
+          {likedPlaces.length > 0
+            ? `${likedPlaces.length} place${likedPlaces.length > 1 ? 's' : ''} to visit`
+            : 'Discover places made for you'}
         </Text>
       </View>
 
@@ -246,14 +203,39 @@ export default function PlansScreen() {
           isLoading={loading}
           onComplete={() => setShowGenerator(false)}
         />
-      ) : plans.length === 0 ? (
-        <EmptyState onGenerate={handleGeneratePlans} loading={loading} themedColors={themedColors} />
+      ) : initialLoading ? (
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { color: themedColors.text.tertiary }]}>
+            Loading...
+          </Text>
+        </View>
+      ) : isEmpty ? (
+        <EmptyState onGenerate={handleGenerateSuggestions} loading={loading} themedColors={themedColors} />
       ) : (
-        <Animated.ScrollView
-          entering={FadeIn.delay(300)}
-          style={styles.plansContainer}
-          contentContainerStyle={styles.plansContent}
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => item.id}
+          renderSectionHeader={({ section }) => (
+            <SectionHeader
+              title={section.title}
+              count={section.data.length}
+              type={section.type}
+              themedColors={themedColors}
+            />
+          )}
+          renderItem={({ item, index, section }) => (
+            <PlaceCard
+              place={item}
+              index={index}
+              onLike={handleLike}
+              onDislike={handleDislike}
+              variant={section.type === 'going' ? 'going' : 'suggestion'}
+              onRemove={section.type === 'going' ? handleRemoveLiked : undefined}
+            />
+          )}
+          contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          stickySectionHeadersEnabled={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -262,44 +244,60 @@ export default function PlansScreen() {
               colors={[colors.primary[500]]}
             />
           }
-        >
-          {/* Plans header */}
-          <View style={styles.plansHeader}>
-            <View>
-              <Text style={[styles.plansTitle, { color: themedColors.text.primary }]}>Your Plans</Text>
-              <Text style={[styles.plansSubtitle, { color: themedColors.text.tertiary }]}>
-                Tap a plan to see details
-              </Text>
-            </View>
-            <AnimatedPressable
-              onPress={handleRegenerate}
-              style={[styles.regenerateButton, { backgroundColor: isDark ? colors.primary[900] : colors.primary[50] }]}
-              hapticType="light"
-            >
-              <Ionicons
-                name="refresh"
-                size={18}
-                color={colors.primary[500]}
-              />
-              <Text style={styles.regenerateText}>New Plans</Text>
-            </AnimatedPressable>
-          </View>
-
-          {/* Plan cards */}
-          {plans.map((plan, index) => (
-            <PlanCard
-              key={plan.id}
-              plan={plan}
-              index={index}
-              onFeedback={handleFeedback}
-            />
-          ))}
-
-          {/* Bottom spacing */}
-          <View style={styles.bottomSpacer} />
-        </Animated.ScrollView>
+          ListFooterComponent={
+            suggestions.length > 0 ? (
+              <View style={styles.footerContainer}>
+                <PremiumButton
+                  onPress={handleGenerateSuggestions}
+                  loading={loading}
+                  gradient
+                  size="md"
+                  icon={!loading ? <Ionicons name="sparkles" size={18} color={colors.neutral[0]} /> : undefined}
+                >
+                  Get More Suggestions
+                </PremiumButton>
+              </View>
+            ) : null
+          }
+        />
       )}
     </View>
+  );
+}
+
+// Section Header Component
+function SectionHeader({
+  title,
+  count,
+  type,
+  themedColors,
+}: {
+  title: string;
+  count: number;
+  type: 'going' | 'suggestion';
+  themedColors: ReturnType<typeof getThemedColors>;
+}) {
+  return (
+    <Animated.View
+      entering={FadeIn.delay(100)}
+      style={styles.sectionHeader}
+    >
+      <View style={styles.sectionTitleContainer}>
+        <Ionicons
+          name={type === 'going' ? 'heart' : 'sparkles'}
+          size={20}
+          color={type === 'going' ? colors.accent.emerald.base : colors.primary[500]}
+        />
+        <Text style={[styles.sectionTitle, { color: themedColors.text.primary }]}>
+          {title}
+        </Text>
+        <View style={[styles.countBadge, { backgroundColor: themedColors.surface.secondary }]}>
+          <Text style={[styles.countText, { color: themedColors.text.secondary }]}>
+            {count}
+          </Text>
+        </View>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -311,7 +309,7 @@ function EmptyState({
 }: {
   onGenerate: () => void;
   loading: boolean;
-  themedColors?: ReturnType<typeof getThemedColors>;
+  themedColors: ReturnType<typeof getThemedColors>;
 }) {
   return (
     <Animated.View
@@ -325,7 +323,7 @@ function EmptyState({
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
-          <Ionicons name="sparkles" size={48} color={colors.neutral[0]} />
+          <Ionicons name="compass" size={48} color={colors.neutral[0]} />
         </LinearGradient>
 
         {/* Decorative rings */}
@@ -334,26 +332,28 @@ function EmptyState({
         <View style={[styles.decorativeRing, styles.ring3]} />
       </View>
 
-      <Text style={[styles.emptyTitle, { color: themedColors?.text.primary || colors.neutral[900] }]}>Ready to plan your weekend?</Text>
-      <Text style={[styles.emptyText, { color: themedColors?.text.tertiary || colors.neutral[500] }]}>
-        I'll analyze your notes and preferences to create personalized plans
-        just for you.
+      <Text style={[styles.emptyTitle, { color: themedColors.text.primary }]}>
+        Discover places just for you
+      </Text>
+      <Text style={[styles.emptyText, { color: themedColors.text.tertiary }]}>
+        Get personalized suggestions based on your notes and personality.
+        Like places to save them to your Going list.
       </Text>
 
       <View style={styles.featureList}>
         <FeatureItem
-          icon="location"
-          text="Finds places near you"
+          icon="document-text"
+          text="Based on your voice notes"
+          themedColors={themedColors}
+        />
+        <FeatureItem
+          icon="person"
+          text="Matches your personality"
           themedColors={themedColors}
         />
         <FeatureItem
           icon="heart"
-          text="Based on your preferences"
-          themedColors={themedColors}
-        />
-        <FeatureItem
-          icon="time"
-          text="Optimized timing"
+          text="Learns from your feedback"
           themedColors={themedColors}
         />
       </View>
@@ -370,20 +370,28 @@ function EmptyState({
           ) : undefined
         }
       >
-        Generate Plans
+        Get Suggestions
       </PremiumButton>
     </Animated.View>
   );
 }
 
 // Feature Item Component
-function FeatureItem({ icon, text, themedColors }: { icon: string; text: string; themedColors?: ReturnType<typeof getThemedColors> }) {
+function FeatureItem({
+  icon,
+  text,
+  themedColors,
+}: {
+  icon: string;
+  text: string;
+  themedColors: ReturnType<typeof getThemedColors>;
+}) {
   return (
     <View style={styles.featureItem}>
-      <View style={[styles.featureIcon, { backgroundColor: themedColors?.primary[50] || colors.primary[50] }]}>
+      <View style={[styles.featureIcon, { backgroundColor: themedColors.primary[50] }]}>
         <Ionicons name={icon as any} size={16} color={colors.primary[500]} />
       </View>
-      <Text style={[styles.featureText, { color: themedColors?.text.secondary || colors.neutral[700] }]}>{text}</Text>
+      <Text style={[styles.featureText, { color: themedColors.text.secondary }]}>{text}</Text>
     </View>
   );
 }
@@ -391,7 +399,6 @@ function FeatureItem({ icon, text, themedColors }: { icon: string; text: string;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
   },
   pageTitleContainer: {
     paddingHorizontal: spacing[5],
@@ -405,44 +412,43 @@ const styles = StyleSheet.create({
   pageSubtitle: {
     fontSize: typography.fontSize.sm,
   },
-  plansContainer: {
+  loadingContainer: {
     flex: 1,
-  },
-  plansContent: {
-    padding: spacing[5],
-  },
-  plansHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing[4],
   },
-  plansTitle: {
+  loadingText: {
+    fontSize: typography.fontSize.base,
+  },
+  listContent: {
+    padding: spacing[5],
+    paddingBottom: spacing[20],
+  },
+  sectionHeader: {
+    marginBottom: spacing[3],
+    marginTop: spacing[2],
+  },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  sectionTitle: {
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral[900],
   },
-  plansSubtitle: {
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral[500],
-    marginTop: spacing[1],
-  },
-  regenerateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-    paddingVertical: spacing[2],
-    paddingHorizontal: spacing[3],
-    backgroundColor: colors.primary[50],
+  countBadge: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
     borderRadius: borderRadius.full,
   },
-  regenerateText: {
-    fontSize: typography.fontSize.sm,
+  countText: {
+    fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
-    color: colors.primary[600],
   },
-  bottomSpacer: {
-    height: spacing[10],
+  footerContainer: {
+    marginTop: spacing[4],
+    alignItems: 'center',
   },
   emptyState: {
     flex: 1,
@@ -492,15 +498,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: typography.fontSize.xl,
     fontWeight: typography.fontWeight.bold,
-    color: colors.neutral[900],
     textAlign: 'center',
     marginBottom: spacing[2],
   },
   emptyText: {
     fontSize: typography.fontSize.base,
-    color: colors.neutral[500],
     textAlign: 'center',
-    lineHeight: typography.fontSize.base * typography.lineHeight.relaxed,
+    lineHeight: typography.fontSize.base * 1.5,
     marginBottom: spacing[6],
   },
   featureList: {
@@ -517,12 +521,10 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.primary[50],
     justifyContent: 'center',
     alignItems: 'center',
   },
   featureText: {
     fontSize: typography.fontSize.base,
-    color: colors.neutral[700],
   },
 });

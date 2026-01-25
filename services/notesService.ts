@@ -108,6 +108,10 @@ export const createNoteWithReminder = async (
       audio_url: audioUrl,
       parsed_data: parsedData,
       tags,
+      // Location-based fields from AI parsing
+      location_category: parsedData.locationCategory || null,
+      shopping_items: parsedData.shoppingItems || null,
+      location_completed: false,
     };
 
     let notificationId: string | null = null;
@@ -353,5 +357,138 @@ export const deleteNote = async (noteId: string) => {
   } catch (error) {
     console.error('Failed to delete note:', error);
     throw error;
+  }
+};
+
+// ===== LOCATION-BASED NOTE FUNCTIONS =====
+
+export type NoteLocationCategory =
+  | 'shopping'
+  | 'grocery'
+  | 'pharmacy'
+  | 'health'
+  | 'errand'
+  | 'work'
+  | 'fitness';
+
+/**
+ * Get all pending location-based notes (not completed)
+ */
+export const getPendingLocationNotes = async (
+  category?: NoteLocationCategory
+): Promise<any[]> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    let query = supabase
+      .from('notes')
+      .select('*')
+      .eq('user_id', user.id)
+      .not('location_category', 'is', null)
+      .eq('location_completed', false)
+      .order('created_at', { ascending: false });
+
+    if (category) {
+      query = query.eq('location_category', category);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Failed to get pending location notes:', error);
+    return [];
+  }
+};
+
+/**
+ * Get notes by location category
+ */
+export const getNotesByLocationCategory = async (
+  categories: NoteLocationCategory[]
+): Promise<any[]> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('notes')
+      .select('*')
+      .eq('user_id', user.id)
+      .in('location_category', categories)
+      .eq('location_completed', false)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Failed to get notes by category:', error);
+    return [];
+  }
+};
+
+/**
+ * Mark a location-based note as completed
+ */
+export const markLocationNoteCompleted = async (noteId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('notes')
+      .update({ location_completed: true })
+      .eq('id', noteId);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Failed to mark note completed:', error);
+    return false;
+  }
+};
+
+/**
+ * Reset a location-based note to pending
+ */
+export const resetLocationNote = async (noteId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('notes')
+      .update({ location_completed: false })
+      .eq('id', noteId);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Failed to reset note:', error);
+    return false;
+  }
+};
+
+/**
+ * Get shopping list items from all pending grocery notes
+ */
+export const getShoppingList = async (): Promise<{ noteId: string; items: string[] }[]> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('notes')
+      .select('id, shopping_items, transcript, parsed_data')
+      .eq('user_id', user.id)
+      .in('location_category', ['grocery', 'shopping'])
+      .eq('location_completed', false)
+      .not('shopping_items', 'is', null)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return (data || []).map(note => ({
+      noteId: note.id,
+      items: note.shopping_items || [],
+    }));
+  } catch (error) {
+    console.error('Failed to get shopping list:', error);
+    return [];
   }
 };

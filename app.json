@@ -14,7 +14,10 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "This app uses speech recognition to convert your voice notes to text.",
-        "NSMicrophoneUsageDescription": "This app needs microphone access to record voice notes."
+        "NSMicrophoneUsageDescription": "This app needs microphone access to record voice notes.",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to provide location-based reminders when you arrive at or leave saved places.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location in the background to remind you of tasks when you arrive at or leave saved places like home, work, or stores.",
+        "UIBackgroundModes": ["location"]
       }
     },
     "android": {
@@ -26,7 +29,12 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.notesapp.notes"
+      "package": "com.notesapp.notes",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -48,7 +56,15 @@
         }
       ],
       "expo-apple-authentication",
-      "expo-speech-recognition"
+      "expo-speech-recognition",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "This app uses your location to remind you of tasks when you arrive at or leave saved places.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
