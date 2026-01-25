@@ -17,6 +17,7 @@ export default {
         NSMicrophoneUsageDescription: "This app needs microphone access to record voice notes.",
         NSLocationWhenInUseUsageDescription: "This app uses your location to provide location-based reminders when you arrive at or leave saved places.",
         NSLocationAlwaysAndWhenInUseUsageDescription: "This app uses your location in the background to remind you of tasks when you arrive at or leave saved places like home, work, or stores.",
+        NSPhotoLibraryUsageDescription: "This app may access your photo library to attach images to your notes.",
         UIBackgroundModes: ["location"],
         ITSAppUsesNonExemptEncryption: false
       }
