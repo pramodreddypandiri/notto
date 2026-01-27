@@ -44,7 +44,8 @@ class ReminderService {
     try {
       if (reminder.reminderType === 'one-time' && reminder.eventDate) {
         // Schedule notifications for X days before the event
-        const eventDate = new Date(reminder.eventDate);
+        // Parse date as local time (not UTC) to avoid timezone shift
+        const eventDate = this.parseLocalDate(reminder.eventDate);
         const daysBefore = reminder.reminderDaysBefore || 1;
 
         // Schedule notification for each day before (including the day itself)
@@ -52,7 +53,7 @@ class ReminderService {
           const reminderDate = new Date(eventDate);
           reminderDate.setDate(reminderDate.getDate() - i);
 
-          // Set time (default to 9am)
+          // Set time (default to 9am local time)
           const [hours, minutes] = (reminder.recurrenceTime || '09:00').split(':');
           reminderDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
@@ -205,6 +206,26 @@ class ReminderService {
   }
 
   /**
+   * Parse a date string (e.g. "2025-02-18") as local time, not UTC.
+   * new Date("2025-02-18") parses as UTC midnight, which shifts to the
+   * previous day in timezones behind UTC (e.g. US timezones).
+   */
+  private parseLocalDate(dateStr: string): Date {
+    const parts = dateStr.split('T')[0].split('-');
+    if (parts.length === 3) {
+      return new Date(
+        parseInt(parts[0]),
+        parseInt(parts[1]) - 1, // month is 0-indexed
+        parseInt(parts[2]),
+        0, 0, 0, 0
+      );
+    }
+    // Fallback: try native parsing but fix timezone
+    const d = new Date(dateStr);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0);
+  }
+
+  /**
    * Get today's reminders (to show and already shown)
    */
   async getTodaysReminders(): Promise<TodaysReminder[]> {
@@ -279,7 +300,7 @@ class ReminderService {
     if (reminder.reminder_type === 'one-time') {
       if (!reminder.event_date) return false;
 
-      const eventDate = new Date(reminder.event_date);
+      const eventDate = this.parseLocalDate(reminder.event_date);
       const daysBefore = reminder.reminder_days_before || 1;
 
       // Calculate reminder window
@@ -321,11 +342,12 @@ class ReminderService {
    */
   private getReminderTimeDisplay(reminder: ReminderNote): string {
     if (reminder.reminder_type === 'one-time' && reminder.event_date) {
-      const eventDate = new Date(reminder.event_date);
+      const eventDate = this.parseLocalDate(reminder.event_date);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      eventDate.setHours(0, 0, 0, 0);
 
-      const daysUntil = Math.ceil(
+      const daysUntil = Math.round(
         (eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
       );
 

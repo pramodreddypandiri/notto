@@ -456,6 +456,7 @@ class LocationService {
 
   /**
    * Get all pending notes that have location triggers
+   * Only returns notes with a location_category (not time-based reminders)
    */
   private async getPendingLocationNotes(): Promise<any[]> {
     try {
@@ -468,6 +469,7 @@ class LocationService {
         .eq('user_id', user.id)
         .not('location_category', 'is', null)
         .eq('location_completed', false)
+        .or('is_reminder.is.null,is_reminder.eq.false') // Exclude time-based reminders
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -480,6 +482,7 @@ class LocationService {
 
   /**
    * Get notes for specific categories
+   * Only returns location-relevant notes (not time-based reminders)
    */
   private async getNotesForCategories(
     categories: NoteCategory[]
@@ -493,6 +496,7 @@ class LocationService {
         .select('*')
         .eq('user_id', user.id)
         .eq('location_completed', false)
+        .or('is_reminder.is.null,is_reminder.eq.false') // Exclude time-based reminders
         .order('created_at', { ascending: false });
 
       if (categories.length > 0) {
