@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabase';
-import { parseNote } from './claudeService';
+import { parseNote, ParsedReminder } from './claudeService';
 import notificationService from './notificationService';
+import reminderService from './reminderService';
 
 // Keywords that indicate a reminder intent
 const REMINDER_KEYWORDS = [
@@ -101,6 +102,9 @@ export const createNoteWithReminder = async (
     const tags = determineTags(transcript, parsedData);
     const isReminder = forceReminder || tags.includes('reminder');
 
+    // Check if this is a new-style reminder (with event date or recurrence)
+    const hasNewReminder = parsedData.reminder?.isReminder === true;
+
     // Prepare note data
     const noteData: any = {
       user_id: user.id,
@@ -112,6 +116,16 @@ export const createNoteWithReminder = async (
       location_category: parsedData.locationCategory || null,
       shopping_items: parsedData.shoppingItems || null,
       location_completed: false,
+      // New reminder fields
+      is_reminder: hasNewReminder || isReminder,
+      reminder_type: parsedData.reminder?.reminderType || null,
+      event_date: parsedData.reminder?.eventDate || null,
+      event_location: parsedData.reminder?.eventLocation || null,
+      reminder_days_before: parsedData.reminder?.reminderDaysBefore || 1,
+      recurrence_pattern: parsedData.reminder?.recurrencePattern || null,
+      recurrence_day: parsedData.reminder?.recurrenceDay ?? null,
+      recurrence_time: parsedData.reminder?.recurrenceTime || '09:00',
+      reminder_active: true,
     };
 
     let notificationId: string | null = null;
@@ -178,9 +192,22 @@ export const createNoteWithReminder = async (
 
     if (error) throw error;
 
+    // Schedule reminders using the new reminder service if it's a new-style reminder
+    if (hasNewReminder && parsedData.reminder && data) {
+      const scheduledIds = await reminderService.scheduleReminder(
+        data.id,
+        transcript,
+        parsedData.reminder as ParsedReminder
+      );
+      if (scheduledIds.length > 0) {
+        notificationId = scheduledIds[0];
+        reminderDisplayText = parsedData.reminder.reminderSummary || parsedData.summary;
+      }
+    }
+
     return {
       note: data,
-      reminderScheduled: !!notificationId,
+      reminderScheduled: !!notificationId || hasNewReminder,
       reminderTime: reminderDisplayText,
       notificationId: notificationId || undefined,
     };

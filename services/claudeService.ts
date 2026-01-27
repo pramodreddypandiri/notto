@@ -14,8 +14,25 @@ export type NoteLocationCategory =
   | 'fitness'
   | null;
 
+// Reminder types
+export type ReminderType = 'one-time' | 'recurring';
+export type RecurrencePattern = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+// Parsed reminder info
+export interface ParsedReminder {
+  isReminder: boolean;
+  reminderType?: ReminderType;
+  eventDate?: string; // ISO date string for one-time events
+  eventLocation?: string;
+  reminderDaysBefore?: number; // days before to remind
+  recurrencePattern?: RecurrencePattern;
+  recurrenceDay?: number; // 0-6 for weekly (0=Sunday), 1-31 for monthly
+  recurrenceTime?: string; // HH:mm format
+  reminderSummary?: string; // what to remind about
+}
+
 interface ParsedNote {
-  type: 'task' | 'preference' | 'intent';
+  type: 'task' | 'preference' | 'intent' | 'reminder';
   activity?: string;
   person?: string;
   food?: string;
@@ -23,6 +40,8 @@ interface ParsedNote {
   summary: string;
   locationCategory?: NoteLocationCategory;
   shoppingItems?: string[];
+  // Reminder fields
+  reminder?: ParsedReminder;
 }
 
 // Check if Claude API is configured
@@ -109,18 +128,110 @@ const detectLocationCategoryLocally = (transcript: string): { category: NoteLoca
   return { category: null, items: [] };
 };
 
+// Local detection of reminder patterns
+const detectReminderLocally = (transcript: string): ParsedReminder | null => {
+  const lower = transcript.toLowerCase();
+
+  // Check for reminder keywords
+  const isReminder = /\b(remind|reminder|don't forget|notify|alert)\b/i.test(lower);
+  if (!isReminder) return null;
+
+  const reminder: ParsedReminder = { isReminder: true };
+
+  // Check for recurring patterns
+  const recurringPatterns = [
+    { pattern: /every\s+(day|daily)/i, recurrence: 'daily' as RecurrencePattern },
+    { pattern: /every\s+monday/i, recurrence: 'weekly' as RecurrencePattern, day: 1 },
+    { pattern: /every\s+tuesday/i, recurrence: 'weekly' as RecurrencePattern, day: 2 },
+    { pattern: /every\s+wednesday/i, recurrence: 'weekly' as RecurrencePattern, day: 3 },
+    { pattern: /every\s+thursday/i, recurrence: 'weekly' as RecurrencePattern, day: 4 },
+    { pattern: /every\s+friday/i, recurrence: 'weekly' as RecurrencePattern, day: 5 },
+    { pattern: /every\s+saturday/i, recurrence: 'weekly' as RecurrencePattern, day: 6 },
+    { pattern: /every\s+sunday/i, recurrence: 'weekly' as RecurrencePattern, day: 0 },
+    { pattern: /every\s+week/i, recurrence: 'weekly' as RecurrencePattern },
+    { pattern: /every\s+month/i, recurrence: 'monthly' as RecurrencePattern },
+    { pattern: /weekly/i, recurrence: 'weekly' as RecurrencePattern },
+    { pattern: /daily/i, recurrence: 'daily' as RecurrencePattern },
+    { pattern: /monthly/i, recurrence: 'monthly' as RecurrencePattern },
+  ];
+
+  for (const { pattern, recurrence, day } of recurringPatterns) {
+    if (pattern.test(lower)) {
+      reminder.reminderType = 'recurring';
+      reminder.recurrencePattern = recurrence;
+      if (day !== undefined) reminder.recurrenceDay = day;
+      break;
+    }
+  }
+
+  // Check for time of day
+  const timePatterns = [
+    { pattern: /morning/i, time: '09:00' },
+    { pattern: /afternoon/i, time: '14:00' },
+    { pattern: /evening/i, time: '18:00' },
+    { pattern: /night/i, time: '20:00' },
+    { pattern: /(\d{1,2}):(\d{2})\s*(am|pm)?/i, extract: true },
+    { pattern: /(\d{1,2})\s*(am|pm)/i, extract: true },
+  ];
+
+  for (const { pattern, time, extract } of timePatterns) {
+    const match = lower.match(pattern);
+    if (match) {
+      if (extract && match[1]) {
+        let hours = parseInt(match[1]);
+        const minutes = match[2] && !isNaN(parseInt(match[2])) ? match[2] : '00';
+        const ampm = match[3] || match[2];
+        if (ampm?.toLowerCase() === 'pm' && hours < 12) hours += 12;
+        if (ampm?.toLowerCase() === 'am' && hours === 12) hours = 0;
+        reminder.recurrenceTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      } else if (time) {
+        reminder.recurrenceTime = time;
+      }
+      break;
+    }
+  }
+
+  // Check for "X days before" pattern
+  const daysBefore = lower.match(/(\d+)\s*days?\s*(before|prior|in advance)/i);
+  if (daysBefore) {
+    reminder.reminderDaysBefore = parseInt(daysBefore[1]);
+  }
+  // Also check for "two days before", "three days before" etc.
+  const wordDaysBefore = lower.match(/(one|two|three|four|five|six|seven)\s*days?\s*(before|prior|in advance)/i);
+  if (wordDaysBefore) {
+    const wordToNum: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 };
+    reminder.reminderDaysBefore = wordToNum[wordDaysBefore[1].toLowerCase()] || 1;
+  }
+
+  // If not recurring but has "days before", it's a one-time event
+  if (!reminder.reminderType && reminder.reminderDaysBefore) {
+    reminder.reminderType = 'one-time';
+  }
+
+  // Default to one-time if no type detected
+  if (!reminder.reminderType) {
+    reminder.reminderType = 'one-time';
+  }
+
+  return reminder;
+};
+
 export const parseNote = async (transcript: string): Promise<ParsedNote> => {
   // First, detect location category locally (no API needed)
   const { category: localCategory, items: shoppingItems } = detectLocationCategoryLocally(transcript);
+
+  // Detect reminders locally
+  const localReminder = detectReminderLocally(transcript);
 
   // If Claude API not configured, return simple fallback with local detection
   if (!isClaudeConfigured()) {
     console.log('Claude API not configured - using simple parsing');
     return {
-      type: 'intent',
+      type: localReminder ? 'reminder' : 'intent',
       summary: transcript,
       locationCategory: localCategory,
       shoppingItems: shoppingItems.length > 0 ? shoppingItems : undefined,
+      reminder: localReminder || undefined,
     };
   }
 
@@ -142,33 +253,52 @@ export const parseNote = async (transcript: string): Promise<ParsedNote> => {
 
 Voice note: "${transcript}"
 
+Today's date: ${new Date().toISOString().split('T')[0]}
+
 Return format:
 {
-  "type": "task" | "preference" | "intent",
+  "type": "task" | "preference" | "intent" | "reminder",
   "activity": string (if mentioned),
   "person": string (if mentioned),
   "food": string (if mentioned),
   "time": string (if mentioned),
   "summary": string (clean one-line version),
   "locationCategory": "shopping" | "grocery" | "pharmacy" | "health" | "errand" | "work" | "fitness" | null,
-  "shoppingItems": string[] (list of items to buy, if applicable)
+  "shoppingItems": string[] (list of items to buy, if applicable),
+  "reminder": {
+    "isReminder": boolean,
+    "reminderType": "one-time" | "recurring",
+    "eventDate": string (ISO date for one-time events, e.g. "2025-02-18"),
+    "eventLocation": string (location of the event if mentioned),
+    "reminderDaysBefore": number (days before to start reminding, default 1),
+    "recurrencePattern": "daily" | "weekly" | "monthly" | "yearly" (for recurring),
+    "recurrenceDay": number (0-6 for weekly where 0=Sunday, 1-31 for monthly),
+    "recurrenceTime": string (HH:mm format, e.g. "09:00"),
+    "reminderSummary": string (what to remind about)
+  } (only if this is a reminder)
 }
 
+Reminder Detection Guidelines:
+- "remind me", "don't forget", "notify me" indicate reminders
+- "every Monday", "every day", "weekly" = recurring reminder
+- "on Feb 18th", "next Tuesday", "tomorrow" = one-time event
+- "remind me 2 days before" = reminderDaysBefore: 2
+- "morning" = 09:00, "afternoon" = 14:00, "evening" = 18:00
+- Parse dates relative to today's date
+
 Location Category Guidelines:
-- "grocery": food items, household supplies (milk, eggs, bread, etc.)
-- "shopping": general retail (clothes, electronics, etc.)
-- "pharmacy": medicine, health products, prescriptions
+- "grocery": food items, household supplies
+- "shopping": general retail
+- "pharmacy": medicine, health products
 - "health": doctor appointments, medical visits
-- "errand": post office, bank, dry cleaning, car service
+- "errand": post office, bank, dry cleaning
 - "work": work-related tasks
 - "fitness": gym, workout, exercise
-- null: no specific location trigger
 
 Examples:
-"I want to go bowling" -> {"type": "intent", "activity": "bowling", "summary": "Want to: go bowling", "locationCategory": null}
-"I'm out of milk and eggs" -> {"type": "task", "food": "milk, eggs", "summary": "Buy: milk and eggs", "locationCategory": "grocery", "shoppingItems": ["milk", "eggs"]}
-"Need cold medicine" -> {"type": "task", "summary": "Buy: cold medicine", "locationCategory": "pharmacy"}
-"Running low on toilet paper" -> {"type": "task", "summary": "Buy: toilet paper", "locationCategory": "grocery", "shoppingItems": ["toilet paper"]}`,
+"Remind me every Monday morning to post on LinkedIn" -> {"type": "reminder", "summary": "Post on LinkedIn", "reminder": {"isReminder": true, "reminderType": "recurring", "recurrencePattern": "weekly", "recurrenceDay": 1, "recurrenceTime": "09:00", "reminderSummary": "Post on LinkedIn"}}
+"I have an event on Feb 18th, remind me 2 days before" -> {"type": "reminder", "summary": "Event on Feb 18th", "reminder": {"isReminder": true, "reminderType": "one-time", "eventDate": "2025-02-18", "reminderDaysBefore": 2, "reminderSummary": "Event on Feb 18th"}}
+"I'm out of milk" -> {"type": "task", "summary": "Buy: milk", "locationCategory": "grocery", "shoppingItems": ["milk"]}`,
           },
         ],
       }),
@@ -188,16 +318,22 @@ Examples:
     if ((!parsed.shoppingItems || parsed.shoppingItems.length === 0) && shoppingItems.length > 0) {
       parsed.shoppingItems = shoppingItems;
     }
+    // Use local reminder detection as fallback
+    if (!parsed.reminder && localReminder) {
+      parsed.reminder = localReminder;
+      parsed.type = 'reminder';
+    }
 
     return parsed;
   } catch (error) {
     console.error('Failed to parse note:', error);
     // Fallback with local detection
     return {
-      type: 'intent',
+      type: localReminder ? 'reminder' : 'intent',
       summary: transcript,
       locationCategory: localCategory,
       shoppingItems: shoppingItems.length > 0 ? shoppingItems : undefined,
+      reminder: localReminder || undefined,
     };
   }
 };
