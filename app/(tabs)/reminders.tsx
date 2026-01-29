@@ -9,7 +9,7 @@
  * - Upcoming reminders preview
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,6 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -30,10 +29,10 @@ import { colors, typography, spacing, borderRadius, shadows, getThemedColors } f
 
 // Components
 import AnimatedPressable from '../../components/ui/AnimatedPressable';
-import TopBar from '../../components/common/TopBar';
+import { TopBar } from '../../components/common/TopBar';
 
 // Services
-import reminderService, { TodaysReminder, ReminderNote } from '../../services/reminderService';
+import reminderService, { TodaysReminder } from '../../services/reminderService';
 
 // Context
 import { useTheme } from '../../context/ThemeContext';
@@ -135,7 +134,7 @@ export default function RemindersScreen() {
   };
 
   // Edit reminder (placeholder - would open a modal)
-  const handleEdit = (reminder: TodaysReminder) => {
+  const handleEdit = (_reminder: TodaysReminder) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
       'Edit Reminder',
@@ -201,8 +200,8 @@ export default function RemindersScreen() {
               {
                 backgroundColor:
                   item.note.reminder_type === 'recurring'
-                    ? colors.accent.purple.light
-                    : colors.accent.blue.light,
+                    ? colors.accent.violet.light
+                    : colors.accent.sky.light,
               },
             ]}
           >
@@ -211,8 +210,8 @@ export default function RemindersScreen() {
               size={12}
               color={
                 item.note.reminder_type === 'recurring'
-                  ? colors.accent.purple.dark
-                  : colors.accent.blue.dark
+                  ? colors.accent.violet.dark
+                  : colors.accent.sky.dark
               }
             />
             <Text
@@ -221,8 +220,8 @@ export default function RemindersScreen() {
                 {
                   color:
                     item.note.reminder_type === 'recurring'
-                      ? colors.accent.purple.dark
-                      : colors.accent.blue.dark,
+                      ? colors.accent.violet.dark
+                      : colors.accent.sky.dark,
                 },
               ]}
             >
@@ -325,7 +324,7 @@ export default function RemindersScreen() {
     <View style={[styles.container, { backgroundColor: themedColors.background.primary }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      <TopBar title="Reminders" />
+      <TopBar themedColors={themedColors} />
 
       {loading ? (
         <View style={styles.loadingContainer}>
