@@ -213,7 +213,35 @@ export const createNoteWithReminder = async (
       );
       if (scheduledIds.length > 0) {
         notificationId = scheduledIds[0];
-        reminderDisplayText = parsedData.reminder.reminderSummary || parsedData.summary;
+        // Build a display string for the reminder badge on home screen
+        const rem = parsedData.reminder;
+        const allTimes = rem.additionalTimes && rem.additionalTimes.length > 0
+          ? rem.additionalTimes
+          : [rem.recurrenceTime || '09:00'];
+        const formatTime = (t: string) => {
+          const [h, m] = t.split(':').map(Number);
+          return new Date(0, 0, 0, h, m).toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: m > 0 ? '2-digit' : undefined,
+            hour12: true,
+          });
+        };
+        const timePart = allTimes.map(formatTime).join(' & ');
+        if (rem.eventDate) {
+          const evDate = new Date(rem.eventDate + 'T00:00:00');
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const diff = Math.round((evDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          const datePart = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : evDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          reminderDisplayText = `${datePart} at ${timePart}`;
+        } else {
+          reminderDisplayText = timePart;
+        }
+        // Update the note with the display-friendly reminder_time
+        await supabase
+          .from('notes')
+          .update({ reminder_time: reminderDisplayText })
+          .eq('id', data.id);
       }
     }
 

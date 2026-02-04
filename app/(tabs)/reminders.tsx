@@ -164,10 +164,10 @@ export default function RemindersScreen() {
           {
             backgroundColor: item.isCompleted
               ? colors.semantic.success
-              : themedColors.surface.secondary,
+              : 'transparent',
             borderColor: item.isCompleted
               ? colors.semantic.success
-              : themedColors.surface.border,
+              : isDark ? colors.neutral[400] : colors.neutral[300],
           },
         ]}
         hapticType="light"
@@ -271,7 +271,7 @@ export default function RemindersScreen() {
 
   // Render section header
   const renderSectionHeader = ({ section }: { section: SectionData }) => (
-    <View style={styles.sectionHeader}>
+    <View style={[styles.sectionHeader, section.title === 'Today' && { marginTop: 0 }]}>
       <Text style={[styles.sectionTitle, { color: themedColors.text.secondary }]}>
         {section.title}
       </Text>

@@ -54,6 +54,14 @@ interface NoteCardProps {
 const SWIPE_THRESHOLD = 80;
 const DELETE_THRESHOLD = 120;
 
+/** Strip leading "Reminder:", "Remind me to", etc. from display text */
+const cleanReminderPrefix = (text: string): string =>
+  text
+    .replace(/^reminder[:\s]+/i, '')
+    .replace(/^remind me (to )?(that )?/i, '')
+    .replace(/^don'?t forget (to )?(that )?/i, '')
+    .trim();
+
 const TAG_ICONS: Record<NoteTag, string> = {
   reminder: 'alarm',
   preference: 'heart',
@@ -144,16 +152,19 @@ export function NoteCard({
 
   // Format reminder time - handles both ISO strings and display strings
   const formatReminderTime = (reminderTime: string) => {
-    // Check if it's an ISO date string
-    if (reminderTime.includes('T') || reminderTime.includes('-')) {
+    // Check if it's an ISO date string (e.g. "2025-02-18T09:00:00.000Z")
+    const isISOString = /^\d{4}-\d{2}-\d{2}/.test(reminderTime);
+    if (isISOString) {
       try {
         const date = new Date(reminderTime);
-        return notificationService.formatReminderDisplay(date);
+        if (!isNaN(date.getTime())) {
+          return notificationService.formatReminderDisplay(date);
+        }
       } catch {
         return reminderTime;
       }
     }
-    // Already a display string
+    // Already a display string (e.g. "Tomorrow at 11 AM & 2 PM")
     return reminderTime;
   };
 
@@ -183,7 +194,7 @@ export function NoteCard({
             <View style={styles.mainContent}>
               {/* Note text */}
               <Text style={[styles.noteText, { color: themedColors.text.primary }]} numberOfLines={2}>
-                {note.parsed_data?.summary || note.transcript}
+                {cleanReminderPrefix(note.parsed_data?.summary || note.transcript)}
               </Text>
 
               {/* Timestamp */}

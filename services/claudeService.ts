@@ -27,7 +27,8 @@ export interface ParsedReminder {
   reminderDaysBefore?: number; // days before to remind
   recurrencePattern?: RecurrencePattern;
   recurrenceDay?: number; // 0-6 for weekly (0=Sunday), 1-31 for monthly
-  recurrenceTime?: string; // HH:mm format
+  recurrenceTime?: string; // HH:mm format (first/primary time)
+  additionalTimes?: string[]; // All mentioned times in HH:mm format (for multiple reminders)
   reminderSummary?: string; // what to remind about
 }
 
@@ -173,30 +174,73 @@ const detectReminderLocally = (transcript: string): ParsedReminder | null => {
     }
   }
 
-  // Check for time of day
-  const timePatterns = [
-    { pattern: /morning/i, time: '09:00' },
-    { pattern: /afternoon/i, time: '14:00' },
-    { pattern: /evening/i, time: '18:00' },
-    { pattern: /night/i, time: '20:00' },
-    { pattern: /(\d{1,2}):(\d{2})\s*(am|pm)?/i, extract: true },
-    { pattern: /(\d{1,2})\s*(am|pm)/i, extract: true },
-  ];
-
-  for (const { pattern, time, extract } of timePatterns) {
-    const match = lower.match(pattern);
-    if (match) {
-      if (extract && match[1]) {
-        let hours = parseInt(match[1]);
-        const minutes = match[2] && !isNaN(parseInt(match[2])) ? match[2] : '00';
-        const ampm = match[3] || match[2];
-        if (ampm?.toLowerCase() === 'pm' && hours < 12) hours += 12;
-        if (ampm?.toLowerCase() === 'am' && hours === 12) hours = 0;
-        reminder.recurrenceTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-      } else if (time) {
-        reminder.recurrenceTime = time;
+  // Check for time of day - extract ALL explicit times, then fall back to vague keywords
+  const parseTimeToken = (match: RegExpMatchArray, type: 'colon' | 'simple' | '24h'): string | null => {
+    if (type === 'colon') {
+      let hours = parseInt(match[1]);
+      const minutes = match[2];
+      const ampm = match[3].replace(/\./g, '').toLowerCase();
+      if (ampm === 'pm' && hours < 12) hours += 12;
+      if (ampm === 'am' && hours === 12) hours = 0;
+      return `${hours.toString().padStart(2, '0')}:${minutes}`;
+    } else if (type === 'simple') {
+      let hours = parseInt(match[1]);
+      const ampm = match[2].replace(/\./g, '').toLowerCase();
+      if (ampm === 'pm' && hours < 12) hours += 12;
+      if (ampm === 'am' && hours === 12) hours = 0;
+      return `${hours.toString().padStart(2, '0')}:00`;
+    } else if (type === '24h') {
+      const hours = parseInt(match[1]);
+      const minutes = match[2];
+      if (hours >= 0 && hours <= 23) {
+        return `${hours.toString().padStart(2, '0')}:${minutes}`;
       }
-      break;
+    }
+    return null;
+  };
+
+  const extractAllTimes = (text: string): string[] => {
+    const times: string[] = [];
+
+    // Match all "11:30 a.m.", "2:00 PM", "11:30am" occurrences
+    const colonMatches = [...text.matchAll(/(\d{1,2}):(\d{2})\s*([ap]\.?m\.?)/gi)];
+    for (const m of colonMatches) {
+      const t = parseTimeToken(m, 'colon');
+      if (t) times.push(t);
+    }
+
+    // Match all "11 a.m.", "2 p.m.", "11am", "2PM" occurrences (skip if already captured with colon)
+    const simpleMatches = [...text.matchAll(/(\d{1,2})\s*([ap]\.?m\.?)/gi)];
+    for (const m of simpleMatches) {
+      // Skip if this was part of a colon match (e.g., "30 a.m." from "11:30 a.m.")
+      const t = parseTimeToken(m, 'simple');
+      if (t && !times.includes(t)) times.push(t);
+    }
+
+    // Match "at 11:30" (24h format, no am/pm)
+    const time24Matches = [...text.matchAll(/\bat\s+(\d{1,2}):(\d{2})\b/gi)];
+    for (const m of time24Matches) {
+      const t = parseTimeToken(m, '24h');
+      if (t && !times.includes(t)) times.push(t);
+    }
+
+    // Fallback to vague time-of-day keywords only if no explicit times found
+    if (times.length === 0) {
+      if (/\bmorning\b/i.test(text)) times.push('09:00');
+      else if (/\bafternoon\b/i.test(text)) times.push('14:00');
+      else if (/\bevening\b/i.test(text)) times.push('18:00');
+      else if (/\bnight\b/i.test(text)) times.push('20:00');
+      else if (/\bnoon\b/i.test(text)) times.push('12:00');
+    }
+
+    return times;
+  };
+
+  const allTimes = extractAllTimes(lower);
+  if (allTimes.length > 0) {
+    reminder.recurrenceTime = allTimes[0];
+    if (allTimes.length > 1) {
+      reminder.additionalTimes = allTimes;
     }
   }
 
@@ -332,7 +376,7 @@ Return format:
   "person": string (if mentioned),
   "food": string (if mentioned),
   "time": string (if mentioned),
-  "summary": string (clean one-line version),
+  "summary": string (clean one-line version - never start with "Reminder:" or "Remind me" prefix),
   "locationCategory": "shopping" | "grocery" | "pharmacy" | "health" | "errand" | "work" | "fitness" | null,
   "shoppingItems": string[] (list of items to buy, if applicable),
   "reminder": {
@@ -343,7 +387,8 @@ Return format:
     "reminderDaysBefore": number (days before to start reminding, default 1),
     "recurrencePattern": "daily" | "weekly" | "monthly" | "yearly" (for recurring),
     "recurrenceDay": number (0-6 for weekly where 0=Sunday, 1-31 for monthly),
-    "recurrenceTime": string (HH:mm format, e.g. "09:00"),
+    "recurrenceTime": string (HH:mm format, e.g. "09:00" - use the FIRST specific time mentioned),
+    "additionalTimes": string[] (all mentioned times in HH:mm format, when multiple times exist, e.g. ["11:00", "14:00"]),
     "reminderSummary": string (what to remind about)
   } (only if this is a reminder),
   "placeIntent": {
@@ -358,7 +403,10 @@ Reminder Detection Guidelines:
 - "every Monday", "every day", "weekly" = recurring reminder
 - "on Feb 18th", "next Tuesday", "tomorrow" = one-time event
 - "remind me 2 days before" = reminderDaysBefore: 2
-- "morning" = 09:00, "afternoon" = 14:00, "evening" = 18:00
+- IMPORTANT: Extract specific times when mentioned. "at 11 a.m." = "11:00", "at 2 p.m." = "14:00", "at 3:30 PM" = "15:30"
+- Speech recognition may produce "a.m." or "p.m." with periods - treat the same as "am"/"pm"
+- Only use vague defaults when no specific time is given: "morning" = "09:00", "afternoon" = "14:00", "evening" = "18:00"
+- If multiple times are mentioned (e.g. "at 11 a.m. and 2 p.m."), use the FIRST time for recurrenceTime and put ALL times in additionalTimes array
 - Parse dates relative to today's date
 
 Location Category Guidelines:
@@ -372,6 +420,7 @@ Location Category Guidelines:
 
 Examples:
 "Remind me every Monday morning to post on LinkedIn" -> {"type": "reminder", "summary": "Post on LinkedIn", "reminder": {"isReminder": true, "reminderType": "recurring", "recurrencePattern": "weekly", "recurrenceDay": 1, "recurrenceTime": "09:00", "reminderSummary": "Post on LinkedIn"}}
+"Do laundry tomorrow at 11 a.m. and 2 p.m." -> {"type": "reminder", "summary": "Do laundry", "reminder": {"isReminder": true, "reminderType": "one-time", "eventDate": "TOMORROW_DATE", "recurrenceTime": "11:00", "additionalTimes": ["11:00", "14:00"], "reminderSummary": "Do laundry"}}
 "I have an event on Feb 18th, remind me 2 days before" -> {"type": "reminder", "summary": "Event on Feb 18th", "reminder": {"isReminder": true, "reminderType": "one-time", "eventDate": "2025-02-18", "reminderDaysBefore": 2, "reminderSummary": "Event on Feb 18th"}}
 "I'm out of milk" -> {"type": "task", "summary": "Buy: milk", "locationCategory": "grocery", "shoppingItems": ["milk"]}
 "I want to go to a salon" -> {"type": "intent", "summary": "Visit a salon", "placeIntent": {"detected": true, "searchQuery": "salon", "placeType": "salon"}}

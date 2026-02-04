@@ -3,6 +3,15 @@ import { supabase } from '../config/supabase';
 import notificationService from './notificationService';
 import { ParsedReminder, RecurrencePattern } from './claudeService';
 
+/** Strip leading "Reminder:", "Remind me to", etc. from display text */
+const cleanReminderPrefix = (text: string): string => {
+  return text
+    .replace(/^reminder[:\s]+/i, '')
+    .replace(/^remind me (to )?(that )?/i, '')
+    .replace(/^don'?t forget (to )?(that )?/i, '')
+    .trim();
+};
+
 export interface ReminderNote {
   id: string;
   user_id: string;
@@ -42,6 +51,11 @@ class ReminderService {
     const notificationIds: string[] = [];
 
     try {
+      // Determine all times to schedule for
+      const times = reminder.additionalTimes && reminder.additionalTimes.length > 0
+        ? reminder.additionalTimes
+        : [reminder.recurrenceTime || '09:00'];
+
       if (reminder.reminderType === 'one-time' && reminder.eventDate) {
         // Schedule notifications for X days before the event
         // Parse date as local time (not UTC) to avoid timezone shift
@@ -50,41 +64,45 @@ class ReminderService {
 
         // Schedule notification for each day before (including the day itself)
         for (let i = daysBefore; i >= 0; i--) {
-          const reminderDate = new Date(eventDate);
-          reminderDate.setDate(reminderDate.getDate() - i);
+          // Schedule for each time
+          for (const time of times) {
+            const reminderDate = new Date(eventDate);
+            reminderDate.setDate(reminderDate.getDate() - i);
 
-          // Set time (default to 9am local time)
-          const [hours, minutes] = (reminder.recurrenceTime || '09:00').split(':');
-          reminderDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+            const [hours, minutes] = time.split(':');
+            reminderDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
-          // Only schedule if in the future
-          if (reminderDate > new Date()) {
-            const daysText = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : `In ${i} days`;
-            const title = i === 0 ? '📅 Event Today!' : `⏰ Upcoming Event (${daysText})`;
+            // Only schedule if in the future
+            if (reminderDate > new Date()) {
+              const daysText = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : `In ${i} days`;
+              const title = i === 0 ? '📅 Event Today!' : `⏰ Upcoming Event (${daysText})`;
 
-            const notifId = await notificationService.scheduleNotification(
-              title,
-              reminder.reminderSummary || transcript,
-              reminderDate
-            );
+              const notifId = await notificationService.scheduleNotification(
+                title,
+                reminder.reminderSummary || transcript,
+                reminderDate
+              );
 
-            if (notifId) {
-              notificationIds.push(notifId);
+              if (notifId) {
+                notificationIds.push(notifId);
+              }
             }
           }
         }
       } else if (reminder.reminderType === 'recurring') {
-        // Schedule recurring notification
-        const notifId = await this.scheduleRecurringNotification(
-          transcript,
-          reminder.recurrencePattern || 'weekly',
-          reminder.recurrenceDay,
-          reminder.recurrenceTime || '09:00',
-          reminder.reminderSummary || transcript
-        );
+        // Schedule recurring notification for each time
+        for (const time of times) {
+          const notifId = await this.scheduleRecurringNotification(
+            transcript,
+            reminder.recurrencePattern || 'weekly',
+            reminder.recurrenceDay,
+            time,
+            reminder.reminderSummary || transcript
+          );
 
-        if (notifId) {
-          notificationIds.push(notifId);
+          if (notifId) {
+            notificationIds.push(notifId);
+          }
         }
       }
 
@@ -270,9 +288,11 @@ class ReminderService {
           todaysReminders.push({
             note: reminder as ReminderNote,
             isCompleted: completedNoteIds.has(reminder.id),
-            reminderText: reminder.parsed_data?.reminder?.reminderSummary ||
-                         reminder.parsed_data?.summary ||
-                         reminder.transcript,
+            reminderText: cleanReminderPrefix(
+              reminder.parsed_data?.reminder?.reminderSummary ||
+              reminder.parsed_data?.summary ||
+              reminder.transcript
+            ),
             timeDisplay: this.getReminderTimeDisplay(reminder),
           });
         }
@@ -301,18 +321,10 @@ class ReminderService {
       if (!reminder.event_date) return false;
 
       const eventDate = this.parseLocalDate(reminder.event_date);
-      const daysBefore = reminder.reminder_days_before || 1;
+      eventDate.setHours(0, 0, 0, 0);
 
-      // Calculate reminder window
-      const windowStart = new Date(eventDate);
-      windowStart.setDate(windowStart.getDate() - daysBefore);
-      windowStart.setHours(0, 0, 0, 0);
-
-      const eventEnd = new Date(eventDate);
-      eventEnd.setHours(23, 59, 59, 999);
-
-      // Show if today is within the reminder window
-      return today >= windowStart && today <= eventEnd;
+      // Only show on the actual event day
+      return today.getTime() === eventDate.getTime();
     }
 
     if (reminder.reminder_type === 'recurring') {
@@ -340,6 +352,25 @@ class ReminderService {
   /**
    * Get display text for reminder time
    */
+  private formatTimeStr(time: string): string {
+    const [hours, minutes] = time.split(':').map(Number);
+    return new Date(0, 0, 0, hours, minutes).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: minutes > 0 ? '2-digit' : undefined,
+      hour12: true,
+    });
+  }
+
+  private getTimesDisplay(reminder: ReminderNote): string {
+    // Check for additional times in parsed_data
+    const additionalTimes = reminder.parsed_data?.reminder?.additionalTimes as string[] | undefined;
+    if (additionalTimes && additionalTimes.length > 1) {
+      return additionalTimes.map(t => this.formatTimeStr(t)).join(' & ');
+    }
+    const time = reminder.recurrence_time || '09:00';
+    return this.formatTimeStr(time);
+  }
+
   private getReminderTimeDisplay(reminder: ReminderNote): string {
     if (reminder.reminder_type === 'one-time' && reminder.event_date) {
       const eventDate = this.parseLocalDate(reminder.event_date);
@@ -351,27 +382,23 @@ class ReminderService {
         (eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
       );
 
-      if (daysUntil === 0) return 'Today';
-      if (daysUntil === 1) return 'Tomorrow';
-      if (daysUntil < 0) return 'Past';
-      return `In ${daysUntil} days`;
+      const timePart = this.getTimesDisplay(reminder);
+      if (daysUntil === 0) return `Today at ${timePart}`;
+      if (daysUntil === 1) return `Tomorrow at ${timePart}`;
+      if (daysUntil < 0) return 'Past due';
+      const datePart = eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return `${datePart} at ${timePart}`;
     }
 
     if (reminder.reminder_type === 'recurring') {
-      const time = reminder.recurrence_time || '09:00';
-      const [hours, minutes] = time.split(':').map(Number);
-      const timeStr = new Date(0, 0, 0, hours, minutes).toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: minutes > 0 ? '2-digit' : undefined,
-        hour12: true,
-      });
+      const timePart = this.getTimesDisplay(reminder);
 
       switch (reminder.recurrence_pattern) {
         case 'daily':
-          return `Daily at ${timeStr}`;
+          return `Daily at ${timePart}`;
         case 'weekly':
           const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-          return `Every ${days[reminder.recurrence_day || 0]} at ${timeStr}`;
+          return `Every ${days[reminder.recurrence_day || 0]} at ${timePart}`;
         case 'monthly':
           return `Monthly on the ${reminder.recurrence_day}${this.getOrdinalSuffix(reminder.recurrence_day || 1)}`;
         default:
@@ -685,9 +712,11 @@ class ReminderService {
             upcoming.push({
               note: reminder,
               isCompleted: false,
-              reminderText: reminder.parsed_data?.reminder?.reminderSummary ||
-                           reminder.parsed_data?.summary ||
-                           reminder.transcript,
+              reminderText: cleanReminderPrefix(
+                reminder.parsed_data?.reminder?.reminderSummary ||
+                reminder.parsed_data?.summary ||
+                reminder.transcript
+              ),
               timeDisplay: this.getReminderTimeDisplay(reminder),
             });
           }
