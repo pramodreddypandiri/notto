@@ -49,9 +49,77 @@ import { createNoteWithReminder, getNotes, updateNoteTags, deleteNote } from '..
 import soundService from '../../services/soundService';
 import notificationService from '../../services/notificationService';
 import { getUserProfile } from '../../services/profileService';
+import { ENV } from '../../config/env';
 
 // Demo mode
 const DEMO_MODE = false;
+
+// Smart tip data
+interface SmartTip {
+  text: string;
+  emoji: string;
+}
+
+const GENERIC_TIPS: SmartTip[] = [
+  { text: "Your future self will thank you for that grocery list you keep ignoring", emoji: "🛒" },
+  { text: "'I'll remember it later' has a 0% success rate. Voice note it", emoji: "🧠" },
+  { text: "The best time to plan your weekend was Monday. The second best is now", emoji: "📅" },
+  { text: "That thing you've been putting off? It takes 5 minutes. You spent 3 days avoiding it", emoji: "⏱️" },
+  { text: "You have 47 mental tabs open. Close some by recording a voice note", emoji: "🗂️" },
+  { text: "Plot twist: your phone can do more than scroll. Like capture brilliant ideas", emoji: "💡" },
+  { text: "Fun fact: humans forget 70% of new info within 24 hours. Voice notes remember everything", emoji: "🐘" },
+  { text: "Your brain is for having ideas, not holding them. That's what this app is for", emoji: "🚀" },
+  { text: "Every expert was once a beginner who took notes. Just saying", emoji: "📝" },
+  { text: "Somewhere in your notes is a million-dollar idea disguised as a grocery run", emoji: "💎" },
+  { text: "You know that thing you keep meaning to do? Yeah, that one. Note it down", emoji: "👀" },
+  { text: "Productivity hack: talk to your phone like it's your personal assistant. Because it is", emoji: "🎙️" },
+  { text: "Your notes are like a time capsule, except useful and less embarrassing", emoji: "⏳" },
+  { text: "Studies show that people who write things down are 42% more likely to do them. We made up that stat, but it sounds right", emoji: "📊" },
+  { text: "The difference between a thought and a plan is writing it down", emoji: "✨" },
+];
+
+const TIP_CACHE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+
+const getRandomTip = (): SmartTip => {
+  return GENERIC_TIPS[Math.floor(Math.random() * GENERIC_TIPS.length)];
+};
+
+const generatePersonalizedTip = async (noteSummaries: string[]): Promise<SmartTip | null> => {
+  try {
+    if (!ENV.CLAUDE_API_KEY || ENV.CLAUDE_API_KEY === '') return null;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ENV.CLAUDE_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 128,
+        messages: [{
+          role: 'user',
+          content: `You are a witty personal assistant. Based on these recent voice notes from a user:
+${noteSummaries.map(s => `- ${s}`).join('\n')}
+
+Give ONE short funny/witty personalized recommendation or observation about their life (under 120 characters). Be playful and specific to their notes. Don't start with "Hey", "Tip:", "Pro tip:", or greetings. Also pick ONE emoji that fits. Return ONLY valid JSON: {"text": "...", "emoji": "..."}`,
+        }],
+      }),
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const content = data.content[0].text;
+    const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
+    const parsed = JSON.parse(jsonStr);
+    if (parsed.text && parsed.emoji) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+};
 
 type NoteTag = 'reminder' | 'preference' | 'my_type' | 'my_vibe';
 
@@ -154,6 +222,43 @@ export default function HomeScreen() {
   // Onboarding state
   const [showOnboardingBanner, setShowOnboardingBanner] = useState(false);
 
+  // Smart tip state
+  const [currentTip, setCurrentTip] = useState<SmartTip>(getRandomTip);
+  const [tipTimestamp, setTipTimestamp] = useState(0);
+
+  const loadSmartTip = useCallback(async (force = false) => {
+    // Use cached tip if fresh enough (unless forced refresh)
+    if (!force && tipTimestamp > 0 && Date.now() - tipTimestamp < TIP_CACHE_DURATION_MS) {
+      return;
+    }
+
+    try {
+      const recentNotes = await getNotes(10);
+      if (recentNotes.length >= 5) {
+        const summaries = recentNotes
+          .map((n: any) => n.parsed_data?.summary || n.transcript)
+          .filter(Boolean)
+          .slice(0, 8);
+        const personalTip = await generatePersonalizedTip(summaries);
+        if (personalTip) {
+          setCurrentTip(personalTip);
+          setTipTimestamp(Date.now());
+          return;
+        }
+      }
+    } catch {
+      // Fall through to generic tip
+    }
+
+    setCurrentTip(getRandomTip());
+    setTipTimestamp(Date.now());
+  }, [tipTimestamp]);
+
+  const handleRefreshTip = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    loadSmartTip(true);
+  }, [loadSmartTip]);
+
   // Recording duration timer
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | undefined;
@@ -194,6 +299,9 @@ export default function HomeScreen() {
 
     // Debug: Log scheduled notifications on app load
     notificationService.debugLogScheduledNotifications();
+
+    // Load smart tip
+    loadSmartTip();
   }, []);
 
   // Whisper fallback handler
@@ -535,11 +643,6 @@ export default function HomeScreen() {
     }
   };
 
-  const navigateToPlans = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/(tabs)/plans');
-  };
-
   const navigateToOnboarding = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/onboarding');
@@ -585,32 +688,34 @@ export default function HomeScreen() {
         </Animated.View>
       )}
 
-      {/* Plan Weekend Card */}
-      <View style={styles.planCardContainer}>
-        <AnimatedPressable
-          onPress={navigateToPlans}
-          style={styles.planCard}
-          hapticType="medium"
-          scaleIntensity="subtle"
+      {/* Smart Tip Card */}
+      <View style={styles.tipCardContainer}>
+        <View
+          style={[
+            styles.tipCard,
+            {
+              backgroundColor: themedColors.surface.primary,
+              borderColor: themedColors.surface.border,
+            },
+          ]}
         >
-          <LinearGradient
-            colors={colors.gradients.primary as [string, string]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.planCardGradient}
+          <View style={[styles.tipEmojiContainer, { backgroundColor: isDark ? colors.primary[900] : colors.primary[50] }]}>
+            <Text style={styles.tipEmojiText}>{currentTip.emoji}</Text>
+          </View>
+          <Text
+            style={[styles.tipText, { color: themedColors.text.primary }]}
+            numberOfLines={2}
           >
-            <View style={styles.planCardContent}>
-              <View style={styles.planCardIcon}>
-                <Ionicons name="sparkles" size={24} color={colors.neutral[0]} />
-              </View>
-              <View style={styles.planCardText}>
-                <Text style={styles.planCardTitle}>Plan My Weekend</Text>
-                <Text style={styles.planCardSubtitle}>Generate personalized plans</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.neutral[0]} />
-            </View>
-          </LinearGradient>
-        </AnimatedPressable>
+            {currentTip.text}
+          </Text>
+          <AnimatedPressable
+            onPress={handleRefreshTip}
+            style={[styles.tipRefreshButton, { backgroundColor: themedColors.surface.secondary }]}
+            hapticType="light"
+          >
+            <Ionicons name="refresh-outline" size={16} color={themedColors.text.tertiary} />
+          </AnimatedPressable>
+        </View>
       </View>
 
       {/* Notes List */}
@@ -847,42 +952,40 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: 'rgba(255,255,255,0.8)',
   },
-  planCardContainer: {
+  tipCardContainer: {
     paddingHorizontal: spacing[5],
     marginBottom: spacing[4],
   },
-  planCard: {
-    borderRadius: borderRadius.xl,
-    overflow: 'hidden',
-  },
-  planCardGradient: {
-    padding: spacing[4],
-  },
-  planCardContent: {
+  tipCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: spacing[3],
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
     gap: spacing[3],
   },
-  planCardIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  tipEmojiContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  planCardText: {
+  tipEmojiText: {
+    fontSize: 20,
+  },
+  tipText: {
     flex: 1,
-  },
-  planCardTitle: {
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral[0],
-    marginBottom: spacing[1],
-  },
-  planCardSubtitle: {
     fontSize: typography.fontSize.sm,
-    color: 'rgba(255,255,255,0.8)',
+    lineHeight: typography.fontSize.sm * typography.lineHeight.normal,
+    fontWeight: typography.fontWeight.medium,
+  },
+  tipRefreshButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   notesSection: {
     flex: 1,
