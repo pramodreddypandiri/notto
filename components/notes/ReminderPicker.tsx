@@ -37,6 +37,8 @@ interface ReminderPickerProps {
   initialDate?: Date;
   /** When true, renders as an overlay without its own Modal wrapper */
   inline?: boolean;
+  /** When provided, shows "Set Reminder & Save" button that triggers this callback */
+  onSaveWithReminder?: (date: Date) => void;
 }
 
 interface QuickOption {
@@ -52,6 +54,7 @@ export function ReminderPicker({
   themedColors,
   initialDate,
   inline = false,
+  onSaveWithReminder,
 }: ReminderPickerProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(initialDate || new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -140,8 +143,13 @@ export function ReminderPicker({
 
   const handleConfirm = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    // onSelectReminder handles closing via parent state
-    onSelectReminder(selectedDate);
+    if (onSaveWithReminder) {
+      // Combined save with reminder action
+      onSaveWithReminder(selectedDate);
+    } else {
+      // onSelectReminder handles closing via parent state
+      onSelectReminder(selectedDate);
+    }
   };
 
   const handleDateChange = (event: DateTimePickerEvent, date?: Date) => {
@@ -387,7 +395,7 @@ export function ReminderPicker({
               fullWidth
               icon={<Ionicons name="checkmark" size={20} color={colors.neutral[0]} />}
             >
-              Set Reminder
+              {onSaveWithReminder ? 'Set Reminder & Save' : 'Set Reminder'}
             </PremiumButton>
           </View>
         </Animated.View>

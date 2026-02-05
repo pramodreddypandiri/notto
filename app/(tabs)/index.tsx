@@ -704,7 +704,6 @@ export default function HomeScreen() {
           </View>
           <Text
             style={[styles.tipText, { color: themedColors.text.primary }]}
-            numberOfLines={2}
           >
             {currentTip.text}
           </Text>
@@ -958,26 +957,26 @@ const styles = StyleSheet.create({
   },
   tipCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing[3],
+    alignItems: 'flex-start',
+    padding: spacing[4],
     borderRadius: borderRadius.xl,
     borderWidth: 1,
     gap: spacing[3],
   },
   tipEmojiContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
   },
   tipEmojiText: {
-    fontSize: 20,
+    fontSize: 22,
   },
   tipText: {
     flex: 1,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.fontSize.sm * typography.lineHeight.normal,
+    fontSize: typography.fontSize.base,
+    lineHeight: typography.fontSize.base * typography.lineHeight.relaxed,
     fontWeight: typography.fontWeight.medium,
   },
   tipRefreshButton: {

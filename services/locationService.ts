@@ -491,19 +491,21 @@ class LocationService {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      let query = supabase
+      // Return empty if no categories specified (safety check)
+      if (categories.length === 0) {
+        console.log('[LocationService] No categories specified, returning empty');
+        return [];
+      }
+
+      const { data, error } = await supabase
         .from('notes')
         .select('*')
         .eq('user_id', user.id)
+        .in('location_category', categories) // Filter by specific categories
         .eq('location_completed', false)
         .or('is_reminder.is.null,is_reminder.eq.false') // Exclude time-based reminders
         .order('created_at', { ascending: false });
 
-      if (categories.length > 0) {
-        query = query.in('location_category', categories);
-      }
-
-      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     } catch (error) {

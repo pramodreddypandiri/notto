@@ -244,7 +244,7 @@ export function NoteCard({
                 style={[styles.actionButton, { backgroundColor: themedColors.surface.secondary }]}
                 hapticType="light"
               >
-                <Ionicons name="pricetag-outline" size={20} color={colors.primary[500]} />
+                <Ionicons name="ellipsis-vertical" size={20} color={themedColors.text.secondary} />
               </AnimatedPressable>
             </View>
           </AnimatedPressable>

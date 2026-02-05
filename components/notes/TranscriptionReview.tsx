@@ -38,7 +38,7 @@ interface TranscriptionReviewProps {
   visible: boolean;
   transcription: string;
   isProcessing: boolean;
-  onSave: (text: string, reminderDate?: Date) => void;
+  onSave: (text: string, reminderDate?: Date) => void | Promise<void>;
   onReRecord: () => void;
   onCancel: () => void;
   themedColors: ReturnType<typeof getThemedColors>;
@@ -57,6 +57,7 @@ export function TranscriptionReview({
   const [isEditing, setIsEditing] = useState(false);
   const [showReminderPicker, setShowReminderPicker] = useState(false);
   const [customReminderDate, setCustomReminderDate] = useState<Date | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Check if this is an empty recording
   const isEmptyRecording = transcription === EMPTY_TRANSCRIPTION_PLACEHOLDER;
@@ -67,6 +68,7 @@ export function TranscriptionReview({
     setEditedText(isEmptyRecording ? '' : transcription);
     setIsEditing(false);
     setCustomReminderDate(null);
+    setIsSaving(false);
   }, [transcription, isEmptyRecording]);
 
   // Get the active reminder display (only custom - auto-detection happens after saving)
@@ -76,10 +78,15 @@ export function TranscriptionReview({
     isValid: true,
   } : null;
 
-  const handleSave = () => {
-    if (editedText.trim().length > 0) {
+  const handleSave = async () => {
+    if (editedText.trim().length > 0 && !isSaving) {
+      setIsSaving(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onSave(editedText.trim(), activeReminder?.date);
+      try {
+        await onSave(editedText.trim(), activeReminder?.date);
+      } catch {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -101,6 +108,19 @@ export function TranscriptionReview({
   const handleReminderSelect = (date: Date) => {
     setCustomReminderDate(date);
     setShowReminderPicker(false);
+  };
+
+  const handleSaveWithReminder = async (date: Date) => {
+    if (editedText.trim().length > 0 && !isSaving) {
+      setShowReminderPicker(false);
+      setIsSaving(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      try {
+        await onSave(editedText.trim(), date);
+      } catch {
+        setIsSaving(false);
+      }
+    }
   };
 
   const handleReminderPickerClose = () => {
@@ -160,8 +180,9 @@ export function TranscriptionReview({
               </Text>
               <AnimatedPressable
                 onPress={handleCancel}
-                style={[styles.closeButton, { backgroundColor: themedColors.surface.secondary }]}
+                style={[styles.closeButton, { backgroundColor: themedColors.surface.secondary, opacity: isSaving ? 0.5 : 1 }]}
                 hapticType="light"
+                disabled={isSaving}
               >
                 <Ionicons name="close" size={20} color={themedColors.text.tertiary} />
               </AnimatedPressable>
@@ -222,6 +243,7 @@ export function TranscriptionReview({
                     multiline
                     placeholder="Your transcribed note will appear here..."
                     placeholderTextColor={themedColors.input.placeholder}
+                    editable={!isSaving}
                   />
                 </View>
 
@@ -243,11 +265,12 @@ export function TranscriptionReview({
                         </Text>
                       </View>
                     </View>
-                    <View style={styles.reminderActions}>
+                    <View style={[styles.reminderActions, { opacity: isSaving ? 0.5 : 1 }]}>
                       <AnimatedPressable
                         onPress={handleReminderPress}
                         style={styles.reminderEditButton}
                         hapticType="light"
+                        disabled={isSaving}
                       >
                         <Ionicons name="pencil" size={16} color={colors.accent.rose.base} />
                       </AnimatedPressable>
@@ -255,6 +278,7 @@ export function TranscriptionReview({
                         onPress={handleRemoveReminder}
                         style={styles.reminderRemoveButton}
                         hapticType="light"
+                        disabled={isSaving}
                       >
                         <Ionicons name="close-circle" size={20} color={colors.accent.rose.base} />
                       </AnimatedPressable>
@@ -264,8 +288,9 @@ export function TranscriptionReview({
                   // Add reminder option
                   <AnimatedPressable
                     onPress={handleReminderPress}
-                    style={[styles.addReminderButton, { backgroundColor: themedColors.surface.secondary }]}
+                    style={[styles.addReminderButton, { backgroundColor: themedColors.surface.secondary, opacity: isSaving ? 0.5 : 1 }]}
                     hapticType="light"
+                    disabled={isSaving}
                   >
                     <Ionicons name="notifications-outline" size={20} color={colors.primary[500]} />
                     <Text style={[styles.addReminderText, { color: colors.primary[500] }]}>
@@ -281,9 +306,10 @@ export function TranscriptionReview({
                     onPress={handleReRecord}
                     style={[
                       styles.secondaryButton,
-                      { backgroundColor: themedColors.surface.secondary },
+                      { backgroundColor: themedColors.surface.secondary, opacity: isSaving ? 0.5 : 1 },
                     ]}
                     hapticType="medium"
+                    disabled={isSaving}
                   >
                     <Ionicons name="mic-outline" size={20} color={colors.primary[500]} />
                     <Text style={[styles.secondaryButtonText, { color: colors.primary[500] }]}>
@@ -296,10 +322,10 @@ export function TranscriptionReview({
                     <PremiumButton
                       onPress={handleSave}
                       gradient
-                      disabled={editedText.trim().length === 0}
-                      icon={<Ionicons name="checkmark" size={20} color={colors.neutral[0]} />}
+                      disabled={editedText.trim().length === 0 || isSaving}
+                      icon={!isSaving ? <Ionicons name="checkmark" size={20} color={colors.neutral[0]} /> : undefined}
                     >
-                      {activeReminder ? 'Save with Reminder' : 'Save Note'}
+                      {isSaving ? 'Saving.....' : activeReminder ? 'Save with Reminder' : 'Save Note'}
                     </PremiumButton>
                   </View>
                 </View>
@@ -314,6 +340,7 @@ export function TranscriptionReview({
                 visible={showReminderPicker}
                 onClose={handleReminderPickerClose}
                 onSelectReminder={handleReminderSelect}
+                onSaveWithReminder={handleSaveWithReminder}
                 themedColors={themedColors}
                 initialDate={activeReminder?.date}
                 inline

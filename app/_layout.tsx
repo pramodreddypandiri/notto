@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from '../config/supabase';
 import { ThemeProvider } from '../context/ThemeContext';
 import reminderService from '../services/reminderService';
+import locationService from '../services/locationService';
 import './globals.css';
 
 export default function RootLayout() {
@@ -38,6 +39,35 @@ export default function RootLayout() {
     }
     if (!isAuthenticated) {
       hasRescheduled.current = false;
+    }
+  }, [isAuthenticated]);
+
+  // Initialize location service and start geofencing/background monitoring on login
+  const hasInitializedLocation = useRef(false);
+  useEffect(() => {
+    if (isAuthenticated && !hasInitializedLocation.current) {
+      hasInitializedLocation.current = true;
+      // Initialize location service and start monitoring if enabled
+      (async () => {
+        try {
+          await locationService.initialize();
+          const settings = await locationService.getSettings();
+          if (settings.enabled) {
+            // Start geofencing for saved locations
+            await locationService.updateGeofencing();
+            // Start background location monitoring for auto store detection
+            if (settings.autoDetectStores) {
+              await locationService.startBackgroundLocationMonitoring();
+            }
+          }
+          console.log('[App] Location service initialized');
+        } catch (error) {
+          console.error('[App] Failed to initialize location service:', error);
+        }
+      })();
+    }
+    if (!isAuthenticated) {
+      hasInitializedLocation.current = false;
     }
   }, [isAuthenticated]);
 

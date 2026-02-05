@@ -62,12 +62,12 @@ export function TopBar({ themedColors, userName }: TopBarProps) {
       <View style={styles.greetingContainer}>
         <Ionicons
           name={greetingIcon as any}
-          size={20}
+          size={24}
           color={colors.primary[500]}
           style={styles.greetingIcon}
         />
         <View>
-          <Text style={[styles.greeting, { color: themedColors.text.secondary }]}>
+          <Text style={[styles.greeting, { color: themedColors.text.primary }]}>
             {greeting}
           </Text>
           {userName && (
@@ -113,8 +113,8 @@ const styles = StyleSheet.create({
     marginRight: spacing[2],
   },
   greeting: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
   },
   userName: {
     fontSize: typography.fontSize.lg,

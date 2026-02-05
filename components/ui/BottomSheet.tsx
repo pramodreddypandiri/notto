@@ -27,6 +27,9 @@ import { colors, spacing, borderRadius, animation } from '../../theme';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MAX_TRANSLATE_Y = -SCREEN_HEIGHT * 0.85;
 
+// Gentler spring for sheet open/close — less overshoot than the default
+const SHEET_SPRING = { damping: 28, stiffness: 300, mass: 1 };
+
 interface BottomSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -64,10 +67,10 @@ export function BottomSheet({
 
   useEffect(() => {
     if (visible) {
-      translateY.value = withSpring(-maxHeight, animation.spring.default);
+      translateY.value = withSpring(-maxHeight, SHEET_SPRING);
       backdropOpacity.value = withTiming(1, { duration: animation.duration.normal });
     } else {
-      translateY.value = withSpring(SCREEN_HEIGHT, animation.spring.default);
+      translateY.value = withSpring(SCREEN_HEIGHT, SHEET_SPRING);
       backdropOpacity.value = withTiming(0, { duration: animation.duration.fast });
     }
   }, [visible, maxHeight]);
@@ -98,12 +101,12 @@ export function BottomSheet({
       'worklet';
       // If dragged down more than threshold, close
       if (event.translationY > closeThreshold || event.velocityY > 500) {
-        translateY.value = withSpring(SCREEN_HEIGHT, animation.spring.default);
+        translateY.value = withSpring(SCREEN_HEIGHT, SHEET_SPRING);
         backdropOpacity.value = withTiming(0, { duration: animation.duration.fast });
         runOnJS(handleClose)();
       } else {
         // Snap back to open position
-        translateY.value = withSpring(-maxHeight, animation.spring.default);
+        translateY.value = withSpring(-maxHeight, SHEET_SPRING);
       }
     });
 
