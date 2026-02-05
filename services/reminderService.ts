@@ -312,19 +312,73 @@ class ReminderService {
   }
 
   /**
+   * Roll over pending one-time tasks from previous days to today.
+   * This ensures old pending tasks appear in Today's list without duplicates.
+   * Called on app open.
+   */
+  async rolloverPendingTasks(): Promise<void> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayStr = today.toISOString().split('T')[0];
+
+      // Find all one-time reminders with event_date before today that are NOT completed
+      const { data: pendingTasks, error } = await supabase
+        .from('notes')
+        .select('id, event_date')
+        .eq('user_id', user.id)
+        .eq('is_reminder', true)
+        .eq('reminder_type', 'one-time')
+        .eq('reminder_active', true)
+        .is('reminder_completed_at', null)
+        .not('event_date', 'is', null)
+        .lt('event_date', todayStr);
+
+      if (error) {
+        console.error('[ReminderService] Failed to query pending tasks:', error);
+        return;
+      }
+
+      if (!pendingTasks || pendingTasks.length === 0) {
+        return;
+      }
+
+      // Update all pending tasks to today's date
+      const taskIds = pendingTasks.map(t => t.id);
+      const { error: updateError } = await supabase
+        .from('notes')
+        .update({ event_date: todayStr })
+        .in('id', taskIds);
+
+      if (updateError) {
+        console.error('[ReminderService] Failed to rollover tasks:', updateError);
+        return;
+      }
+
+      console.log(`[ReminderService] Rolled over ${taskIds.length} pending tasks to today`);
+    } catch (error) {
+      console.error('[ReminderService] Failed to rollover pending tasks:', error);
+    }
+  }
+
+  /**
    * Check if a reminder should show today
    */
   private shouldShowReminderToday(reminder: ReminderNote, today: Date): boolean {
     const todayDay = today.getDay(); // 0 = Sunday
 
     if (reminder.reminder_type === 'one-time') {
-      if (!reminder.event_date) return false;
+      // No event_date = show every day until completed
+      if (!reminder.event_date) return true;
 
       const eventDate = this.parseLocalDate(reminder.event_date);
       eventDate.setHours(0, 0, 0, 0);
 
-      // Only show on the actual event day
-      return today.getTime() === eventDate.getTime();
+      // Show if event is today OR in the past (pending tasks roll over)
+      return eventDate.getTime() <= today.getTime();
     }
 
     if (reminder.reminder_type === 'recurring') {
@@ -346,7 +400,8 @@ class ReminderService {
       }
     }
 
-    return false;
+    // For reminders without a type (legacy), show if they're active
+    return true;
   }
 
   /**

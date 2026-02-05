@@ -53,8 +53,12 @@ export default function RemindersScreen() {
   const themedColors = getThemedColors(isDark);
 
   // Load reminders
-  const loadReminders = async () => {
+  const loadReminders = async (shouldRollover: boolean = false) => {
     try {
+      // Roll over pending tasks from previous days (only on initial load/focus)
+      if (shouldRollover) {
+        await reminderService.rolloverPendingTasks();
+      }
       const todaysReminders = await reminderService.getTodaysReminders();
 
       // Split into pending and completed
@@ -81,17 +85,17 @@ export default function RemindersScreen() {
     }
   };
 
-  // Refresh on focus
+  // Refresh on focus (with rollover to move pending tasks to today)
   useFocusEffect(
     useCallback(() => {
-      loadReminders();
+      loadReminders(true); // Roll over pending tasks on focus
     }, [])
   );
 
   // Pull to refresh
   const onRefresh = () => {
     setRefreshing(true);
-    loadReminders();
+    loadReminders(false); // No rollover on manual refresh
   };
 
   // Mark reminder as done

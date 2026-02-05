@@ -48,6 +48,7 @@ import speechRecognitionService, { useSpeechRecognitionEvent } from '../../servi
 import { createNoteWithReminder, getNotes, updateNoteTags, deleteNote } from '../../services/notesService';
 import soundService from '../../services/soundService';
 import notificationService from '../../services/notificationService';
+import reminderService from '../../services/reminderService';
 import { getUserProfile } from '../../services/profileService';
 import { ENV } from '../../config/env';
 
@@ -277,6 +278,9 @@ export default function HomeScreen() {
 
   // Initialize
   useEffect(() => {
+    // Roll over pending tasks from previous days to today
+    reminderService.rolloverPendingTasks();
+
     loadNotes();
     soundService.initialize();
 
