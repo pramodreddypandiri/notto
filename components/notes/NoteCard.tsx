@@ -29,7 +29,7 @@ import { colors, typography, spacing, borderRadius, shadows, animation, tagColor
 import { useTheme } from '../../context/ThemeContext';
 import notificationService from '../../services/notificationService';
 
-type NoteTag = 'reminder' | 'preference' | 'my_type' | 'my_vibe';
+type NoteTag = 'reminder';
 type NoteType = 'journal' | 'task' | 'reminder';
 
 interface EnrichmentLink {
@@ -86,16 +86,10 @@ const cleanReminderPrefix = (text: string): string =>
 
 const TAG_ICONS: Record<NoteTag, string> = {
   reminder: 'alarm',
-  preference: 'heart',
-  my_type: 'star',
-  my_vibe: 'musical-notes',
 };
 
 const TAG_LABELS: Record<NoteTag, string> = {
   reminder: 'Reminder',
-  preference: 'Preference',
-  my_type: 'My Type',
-  my_vibe: 'My Vibe',
 };
 
 // Enrichment Section Component

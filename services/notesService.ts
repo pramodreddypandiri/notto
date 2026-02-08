@@ -55,10 +55,6 @@ const determineTags = (
   if (parsedData) {
     if (parsedData.type === 'task') {
       tags.push('reminder');
-    } else if (parsedData.type === 'preference') {
-      tags.push('preference');
-    } else if (parsedData.food || parsedData.activity) {
-      tags.push('my_type');
     }
   }
 

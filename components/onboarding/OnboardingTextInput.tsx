@@ -195,10 +195,10 @@ const styles = StyleSheet.create({
     color: colors.neutral[400],
   },
   characterCountWarning: {
-    color: colors.warning[500],
+    color: colors.semantic.warning,
   },
   characterCountLimit: {
-    color: colors.error[500],
+    color: colors.semantic.error,
   },
 });
 

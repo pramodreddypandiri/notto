@@ -122,7 +122,7 @@ Give ONE short funny/witty personalized recommendation or observation about thei
   }
 };
 
-type NoteTag = 'reminder' | 'preference' | 'my_type' | 'my_vibe';
+type NoteTag = 'reminder';
 
 interface Note {
   id: string;
@@ -142,14 +142,14 @@ const DEMO_NOTES: Note[] = [
     transcript: 'I want to go bowling this weekend',
     parsed_data: { summary: 'Want to: go bowling', type: 'intent' },
     created_at: new Date().toISOString(),
-    tags: ['preference'],
+    tags: ['reminder'],
   },
   {
     id: '2',
     transcript: 'Try Mexican food',
-    parsed_data: { summary: 'Preference: Mexican food', type: 'preference' },
+    parsed_data: { summary: 'Reminder: Try Mexican food', type: 'reminder' },
     created_at: new Date(Date.now() - 3600000).toISOString(),
-    tags: ['my_type'],
+    tags: ['reminder'],
   },
   {
     id: '3',
@@ -172,24 +172,6 @@ const TAG_OPTIONS: {
     title: 'Reminder',
     description: 'Get notified at a specific time',
     icon: 'alarm',
-  },
-  {
-    tag: 'preference',
-    title: 'Preference',
-    description: 'Things you like or want to try',
-    icon: 'heart',
-  },
-  {
-    tag: 'my_type',
-    title: 'My Type',
-    description: 'Activities that match your style',
-    icon: 'star',
-  },
-  {
-    tag: 'my_vibe',
-    title: 'My Vibe',
-    description: 'Mood and atmosphere preferences',
-    icon: 'musical-notes',
   },
 ];
 
