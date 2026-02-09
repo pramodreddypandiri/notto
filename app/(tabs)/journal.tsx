@@ -16,6 +16,7 @@ import {
   FlatList,
   RefreshControl,
   StatusBar,
+  Modal,
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,7 +31,7 @@ import AnimatedPressable from '../../components/ui/AnimatedPressable';
 import { TopBar } from '../../components/common/TopBar';
 import { PhotoCard } from '../../components/journal/PhotoCard';
 import { CategoryFilter, FilterOption } from '../../components/journal/CategoryFilter';
-import { AddPhotoSheet } from '../../components/journal/AddPhotoSheet';
+import { CameraView } from '../../components/journal/CameraView';
 import { InsightsView } from '../../components/journal/InsightsView';
 import { EmptyJournalState } from '../../components/journal/EmptyJournalState';
 
@@ -60,7 +61,7 @@ export default function JournalScreen() {
   const [filter, setFilter] = useState<FilterOption>('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showAddSheet, setShowAddSheet] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
 
   // Load photos and stats
   const loadData = async () => {
@@ -242,7 +243,7 @@ export default function JournalScreen() {
             No {filter} photos yet
           </Text>
           <AnimatedPressable
-            onPress={() => setShowAddSheet(true)}
+            onPress={() => setShowCamera(true)}
             style={[styles.emptyFilterButton, { borderColor: colors.primary[500] }]}
             hapticType="light"
           >
@@ -254,7 +255,7 @@ export default function JournalScreen() {
       );
     }
 
-    return <EmptyJournalState onAddPhoto={() => setShowAddSheet(true)} />;
+    return <EmptyJournalState onAddPhoto={() => setShowCamera(true)} />;
   };
 
   return (
@@ -299,25 +300,32 @@ export default function JournalScreen() {
       )}
 
       {/* Floating Add Button */}
-      {activeTab === 'photos' && !showAddSheet && (
+      {activeTab === 'photos' && !showCamera && (
         <AnimatedPressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setShowAddSheet(true);
+            setShowCamera(true);
           }}
           style={[styles.fab, shadows.primary, { backgroundColor: colors.primary[500] }]}
           hapticType="medium"
         >
-          <Ionicons name="add" size={28} color={colors.neutral[0]} />
+          <Ionicons name="camera" size={28} color={colors.neutral[0]} />
         </AnimatedPressable>
       )}
 
-      {/* Add Photo Sheet */}
-      <AddPhotoSheet
-        visible={showAddSheet}
-        onClose={() => setShowAddSheet(false)}
-        onSave={handleAddPhoto}
-      />
+      {/* Full-screen Camera Modal */}
+      <Modal
+        visible={showCamera}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        statusBarTranslucent
+      >
+        <CameraView
+          visible={showCamera}
+          onClose={() => setShowCamera(false)}
+          onCapture={handleAddPhoto}
+        />
+      </Modal>
     </View>
   );
 }

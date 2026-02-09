@@ -9,7 +9,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import { File, Directory, Paths } from 'expo-file-system/next';
 import * as ImagePicker from 'expo-image-picker';
 
 // Storage keys
@@ -55,15 +55,22 @@ const DEFAULT_STATS: JournalStats = {
 };
 
 // Directory for storing photos
-const JOURNAL_PHOTOS_DIR = `${FileSystem.documentDirectory}journal_photos/`;
+const JOURNAL_PHOTOS_DIR_NAME = 'journal_photos';
+
+/**
+ * Get the journal photos directory
+ */
+function getJournalDirectory(): Directory {
+  return new Directory(Paths.document, JOURNAL_PHOTOS_DIR_NAME);
+}
 
 /**
  * Ensure the photos directory exists
  */
 async function ensureDirectory(): Promise<void> {
-  const dirInfo = await FileSystem.getInfoAsync(JOURNAL_PHOTOS_DIR);
-  if (!dirInfo.exists) {
-    await FileSystem.makeDirectoryAsync(JOURNAL_PHOTOS_DIR, { intermediates: true });
+  const dir = getJournalDirectory();
+  if (!dir.exists) {
+    dir.create();
   }
 }
 
@@ -149,17 +156,18 @@ export async function savePhoto(
 
     const photoId = generatePhotoId();
     const fileExtension = tempUri.split('.').pop() || 'jpg';
-    const localUri = `${JOURNAL_PHOTOS_DIR}${photoId}.${fileExtension}`;
+    const fileName = `${photoId}.${fileExtension}`;
+
+    const dir = getJournalDirectory();
+    const destinationFile = new File(dir, fileName);
 
     // Copy photo to app's document directory
-    await FileSystem.copyAsync({
-      from: tempUri,
-      to: localUri,
-    });
+    const sourceFile = new File(tempUri);
+    sourceFile.copy(destinationFile);
 
     const photo: JournalPhoto = {
       id: photoId,
-      localUri,
+      localUri: destinationFile.uri,
       category,
       caption,
       createdAt: new Date().toISOString(),
@@ -229,9 +237,13 @@ export async function deletePhoto(photoId: string): Promise<boolean> {
     const photo = photos[photoIndex];
 
     // Delete file from storage
-    const fileInfo = await FileSystem.getInfoAsync(photo.localUri);
-    if (fileInfo.exists) {
-      await FileSystem.deleteAsync(photo.localUri);
+    try {
+      const file = new File(photo.localUri);
+      if (file.exists) {
+        file.delete();
+      }
+    } catch (fileError) {
+      console.warn('Could not delete photo file:', fileError);
     }
 
     // Remove from array
@@ -413,9 +425,9 @@ export async function getActivityHistory(days: number = 30): Promise<{ date: str
 export async function clearAllJournalData(): Promise<void> {
   try {
     // Delete all photo files
-    const dirInfo = await FileSystem.getInfoAsync(JOURNAL_PHOTOS_DIR);
-    if (dirInfo.exists) {
-      await FileSystem.deleteAsync(JOURNAL_PHOTOS_DIR, { idempotent: true });
+    const dir = getJournalDirectory();
+    if (dir.exists) {
+      dir.delete();
     }
 
     // Clear AsyncStorage
