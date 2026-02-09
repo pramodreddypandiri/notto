@@ -257,9 +257,10 @@ class ReminderService {
       tomorrow.setDate(tomorrow.getDate() + 1);
 
       const todayStr = today.toISOString().split('T')[0];
+      const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
       // Get all active reminders
-      const { data: reminders, error } = await supabase
+      const { data: activeReminders, error } = await supabase
         .from('notes')
         .select('*')
         .eq('user_id', user.id)
@@ -269,7 +270,29 @@ class ReminderService {
 
       if (error) throw error;
 
-      // Get today's completions
+      // Also get one-time reminders that were completed TODAY
+      // (these have reminder_active = false, so they're excluded from the above query)
+      const { data: completedTodayReminders } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_reminder', true)
+        .eq('reminder_type', 'one-time')
+        .eq('reminder_active', false)
+        .not('reminder_completed_at', 'is', null)
+        .gte('reminder_completed_at', `${todayStr}T00:00:00`)
+        .lt('reminder_completed_at', `${tomorrowStr}T00:00:00`);
+
+      // Combine active and today's completed one-time reminders
+      const allReminders = [...(activeReminders || [])];
+      const existingIds = new Set(allReminders.map(r => r.id));
+      for (const r of (completedTodayReminders || [])) {
+        if (!existingIds.has(r.id)) {
+          allReminders.push(r);
+        }
+      }
+
+      // Get today's completions for recurring reminders
       const { data: completions } = await supabase
         .from('reminder_completions')
         .select('note_id')
@@ -281,13 +304,21 @@ class ReminderService {
       // Filter reminders for today
       const todaysReminders: TodaysReminder[] = [];
 
-      for (const reminder of (reminders || [])) {
+      for (const reminder of allReminders) {
+        // Check if this was from the completed-today query
+        const wasCompletedToday = !reminder.reminder_active && reminder.reminder_completed_at !== null;
         const shouldShowToday = this.shouldShowReminderToday(reminder, today);
 
-        if (shouldShowToday) {
+        if (shouldShowToday || wasCompletedToday) {
+          // For one-time tasks: check reminder_completed_at
+          // For recurring tasks: check completions table
+          const isCompleted = reminder.reminder_type === 'one-time'
+            ? reminder.reminder_completed_at !== null
+            : completedNoteIds.has(reminder.id);
+
           todaysReminders.push({
             note: reminder as ReminderNote,
-            isCompleted: completedNoteIds.has(reminder.id),
+            isCompleted,
             reminderText: cleanReminderPrefix(
               reminder.parsed_data?.reminder?.reminderSummary ||
               reminder.parsed_data?.summary ||
