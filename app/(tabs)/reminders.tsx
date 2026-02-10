@@ -9,7 +9,7 @@
  * - Task reminders shown here so users don't miss notifications
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -47,29 +47,68 @@ export default function RemindersScreen() {
   const [sections, setSections] = useState<SectionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   // Theme
   const { isDark } = useTheme();
   const themedColors = getThemedColors(isDark);
 
-  // Load reminders
+  // Date helpers
+  const isToday = (date: Date) => {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  };
+
+  const isTomorrow = (date: Date) => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return date.toDateString() === tomorrow.toDateString();
+  };
+
+  const formatDateLabel = (date: Date) => {
+    if (isToday(date)) return 'Today';
+    if (isTomorrow(date)) return 'Tomorrow';
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const formatDateShort = (date: Date) => {
+    return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+  };
+
+  const navigateDate = (direction: 'prev' | 'next') => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
+    setSelectedDate(newDate);
+  };
+
+  const goToToday = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedDate(new Date());
+  };
+
+  // Load reminders for the selected date
   const loadReminders = async (shouldRollover: boolean = false) => {
     try {
-      // Roll over pending tasks from previous days (only on initial load/focus)
-      if (shouldRollover) {
+      // Roll over pending tasks from previous days (only on initial load/focus for today)
+      if (shouldRollover && isToday(selectedDate)) {
         await reminderService.rolloverPendingTasks();
       }
-      const todaysReminders = await reminderService.getTodaysReminders();
+
+      // Use the appropriate method based on selected date
+      const reminders = isToday(selectedDate)
+        ? await reminderService.getTodaysReminders()
+        : await reminderService.getRemindersForDate(selectedDate);
 
       // Split into pending and completed
-      const pending = todaysReminders.filter(r => !r.isCompleted);
-      const completed = todaysReminders.filter(r => r.isCompleted);
+      const pending = reminders.filter(r => !r.isCompleted);
+      const completed = reminders.filter(r => r.isCompleted);
 
       setSections([
         {
-          title: 'Today',
+          title: formatDateLabel(selectedDate),
           data: pending,
-          emptyMessage: 'No tasks for today',
+          emptyMessage: `No tasks for ${formatDateLabel(selectedDate).toLowerCase()}`,
         },
         {
           title: 'Completed',
@@ -89,8 +128,14 @@ export default function RemindersScreen() {
   useFocusEffect(
     useCallback(() => {
       loadReminders(true); // Roll over pending tasks on focus
-    }, [])
+    }, [selectedDate])
   );
+
+  // Reload when selected date changes
+  useEffect(() => {
+    setLoading(true);
+    loadReminders(false);
+  }, [selectedDate]);
 
   // Pull to refresh
   const onRefresh = () => {
@@ -274,18 +319,71 @@ export default function RemindersScreen() {
   );
 
   // Render section header
-  const renderSectionHeader = ({ section }: { section: SectionData }) => (
-    <View style={[styles.sectionHeader, section.title === 'Today' && { marginTop: 0 }]}>
-      <Text style={[styles.sectionTitle, { color: themedColors.text.secondary }]}>
-        {section.title}
-      </Text>
-      {section.data.length > 0 && (
-        <View style={[styles.countBadge, { backgroundColor: colors.primary[500] }]}>
-          <Text style={styles.countText}>{section.data.length}</Text>
+  const renderSectionHeader = ({ section }: { section: SectionData }) => {
+    const isDateSection = section.title !== 'Completed';
+
+    return (
+      <View style={[styles.sectionHeader, isDateSection && { marginTop: 0 }]}>
+        <View style={styles.sectionTitleRow}>
+          {/* Previous day button - only for date section */}
+          {isDateSection && (
+            <AnimatedPressable
+              onPress={() => navigateDate('prev')}
+              style={styles.dateNavButton}
+              hapticType="light"
+            >
+              <Ionicons
+                name="chevron-back"
+                size={20}
+                color={themedColors.text.secondary}
+              />
+            </AnimatedPressable>
+          )}
+
+          <Text style={[styles.sectionTitle, { color: themedColors.text.secondary }]}>
+            {section.title}
+          </Text>
+
+          {section.data.length > 0 && (
+            <View style={[styles.countBadge, { backgroundColor: colors.primary[500] }]}>
+              <Text style={styles.countText}>{section.data.length}</Text>
+            </View>
+          )}
         </View>
-      )}
-    </View>
-  );
+
+        {/* Date navigation - only for date section */}
+        {isDateSection && (
+          <View style={styles.dateNavRow}>
+            {!isToday(selectedDate) && (
+              <AnimatedPressable
+                onPress={goToToday}
+                style={[styles.todayButton, { backgroundColor: colors.primary[500] + '20' }]}
+                hapticType="light"
+              >
+                <Text style={[styles.todayButtonText, { color: colors.primary[500] }]}>
+                  Today
+                </Text>
+              </AnimatedPressable>
+            )}
+            <AnimatedPressable
+              onPress={() => navigateDate('next')}
+              style={styles.dateNavButton}
+              hapticType="light"
+            >
+              <Text style={[styles.dateText, { color: themedColors.text.secondary }]}>
+                {formatDateShort(selectedDate)}
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={themedColors.text.secondary}
+              />
+            </AnimatedPressable>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   // Render empty section
   const renderSectionEmpty = (section: SectionData) => {
@@ -381,8 +479,13 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: spacing[3],
     marginTop: spacing[4],
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   sectionTitle: {
     fontSize: typography.fontSize.sm,
@@ -395,6 +498,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[2],
     paddingVertical: 2,
     borderRadius: borderRadius.full,
+  },
+  dateNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  dateNavButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing[1],
+  },
+  dateText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+  },
+  todayButton: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+    borderRadius: borderRadius.md,
+  },
+  todayButtonText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
   },
   countText: {
     fontSize: typography.fontSize.xs,

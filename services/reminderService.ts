@@ -259,7 +259,7 @@ class ReminderService {
       const todayStr = today.toISOString().split('T')[0];
       const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-      // Get all active reminders
+      // Get all active reminders (scheduled tasks)
       const { data: activeReminders, error } = await supabase
         .from('notes')
         .select('*')
@@ -269,6 +269,28 @@ class ReminderService {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+
+      // Get unscheduled tasks (note_type = 'task' but is_reminder = false)
+      // These are tasks without specific dates that should show in Today
+      const { data: unscheduledTasks } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('note_type', 'task')
+        .eq('is_reminder', false)
+        .is('reminder_completed_at', null)
+        .order('created_at', { ascending: false });
+
+      // Also get completed unscheduled tasks from today
+      const { data: completedUnscheduledTasks } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('note_type', 'task')
+        .eq('is_reminder', false)
+        .not('reminder_completed_at', 'is', null)
+        .gte('reminder_completed_at', `${todayStr}T00:00:00`)
+        .lt('reminder_completed_at', `${tomorrowStr}T00:00:00`);
 
       // Also get one-time reminders that were completed TODAY
       // (these have reminder_active = false, so they're excluded from the above query)
@@ -283,12 +305,31 @@ class ReminderService {
         .gte('reminder_completed_at', `${todayStr}T00:00:00`)
         .lt('reminder_completed_at', `${tomorrowStr}T00:00:00`);
 
-      // Combine active and today's completed one-time reminders
+      // Combine all reminders and tasks
       const allReminders = [...(activeReminders || [])];
       const existingIds = new Set(allReminders.map(r => r.id));
+
+      // Add unscheduled tasks
+      for (const r of (unscheduledTasks || [])) {
+        if (!existingIds.has(r.id)) {
+          allReminders.push(r);
+          existingIds.add(r.id);
+        }
+      }
+
+      // Add completed unscheduled tasks
+      for (const r of (completedUnscheduledTasks || [])) {
+        if (!existingIds.has(r.id)) {
+          allReminders.push(r);
+          existingIds.add(r.id);
+        }
+      }
+
+      // Add completed reminders
       for (const r of (completedTodayReminders || [])) {
         if (!existingIds.has(r.id)) {
           allReminders.push(r);
+          existingIds.add(r.id);
         }
       }
 
@@ -305,16 +346,24 @@ class ReminderService {
       const todaysReminders: TodaysReminder[] = [];
 
       for (const reminder of allReminders) {
-        // Check if this was from the completed-today query
-        const wasCompletedToday = !reminder.reminder_active && reminder.reminder_completed_at !== null;
-        const shouldShowToday = this.shouldShowReminderToday(reminder, today);
+        // Check if this is an unscheduled task (note_type = 'task', is_reminder = false)
+        const isUnscheduledTask = !reminder.is_reminder && reminder.note_type === 'task';
+
+        // Check if this was completed today
+        const wasCompletedToday = reminder.reminder_completed_at !== null;
+
+        // Determine if should show
+        const shouldShowToday = isUnscheduledTask
+          ? true // Unscheduled tasks always show in Today
+          : this.shouldShowReminderToday(reminder, today);
 
         if (shouldShowToday || wasCompletedToday) {
-          // For one-time tasks: check reminder_completed_at
-          // For recurring tasks: check completions table
-          const isCompleted = reminder.reminder_type === 'one-time'
-            ? reminder.reminder_completed_at !== null
-            : completedNoteIds.has(reminder.id);
+          // Determine completion status:
+          // - Unscheduled tasks & one-time: check reminder_completed_at
+          // - Recurring: check completions table
+          const isCompleted = reminder.reminder_type === 'recurring'
+            ? completedNoteIds.has(reminder.id)
+            : reminder.reminder_completed_at !== null;
 
           todaysReminders.push({
             note: reminder as ReminderNote,
@@ -324,7 +373,7 @@ class ReminderService {
               reminder.parsed_data?.summary ||
               reminder.transcript
             ),
-            timeDisplay: this.getReminderTimeDisplay(reminder),
+            timeDisplay: isUnscheduledTask ? 'Anytime' : this.getReminderTimeDisplay(reminder),
           });
         }
       }
@@ -338,6 +387,101 @@ class ReminderService {
       });
     } catch (error) {
       console.error('[ReminderService] Failed to get today\'s reminders:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get reminders for a specific date (for date navigation)
+   */
+  async getRemindersForDate(targetDate: Date): Promise<TodaysReminder[]> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const date = new Date(targetDate);
+      date.setHours(0, 0, 0, 0);
+      const nextDay = new Date(date);
+      nextDay.setDate(nextDay.getDate() + 1);
+
+      const dateStr = date.toISOString().split('T')[0];
+      const nextDayStr = nextDay.toISOString().split('T')[0];
+
+      // Get all active reminders
+      const { data: activeReminders, error } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_reminder', true)
+        .eq('reminder_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Also get one-time reminders that were completed on this date
+      const { data: completedOnDateReminders } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_reminder', true)
+        .eq('reminder_type', 'one-time')
+        .eq('reminder_active', false)
+        .not('reminder_completed_at', 'is', null)
+        .gte('reminder_completed_at', `${dateStr}T00:00:00`)
+        .lt('reminder_completed_at', `${nextDayStr}T00:00:00`);
+
+      // Combine active and completed reminders
+      const allReminders = [...(activeReminders || [])];
+      const existingIds = new Set(allReminders.map(r => r.id));
+      for (const r of (completedOnDateReminders || [])) {
+        if (!existingIds.has(r.id)) {
+          allReminders.push(r);
+        }
+      }
+
+      // Get completions for this date (for recurring reminders)
+      const { data: completions } = await supabase
+        .from('reminder_completions')
+        .select('note_id')
+        .eq('user_id', user.id)
+        .eq('completed_date', dateStr);
+
+      const completedNoteIds = new Set((completions || []).map(c => c.note_id));
+
+      // Filter reminders for the target date
+      const remindersForDate: TodaysReminder[] = [];
+
+      for (const reminder of allReminders) {
+        const wasCompletedOnDate = !reminder.reminder_active && reminder.reminder_completed_at !== null;
+        const shouldShowOnDate = this.shouldShowReminderToday(reminder, date);
+
+        if (shouldShowOnDate || wasCompletedOnDate) {
+          const isCompleted = reminder.reminder_type === 'one-time'
+            ? reminder.reminder_completed_at !== null
+            : completedNoteIds.has(reminder.id);
+
+          remindersForDate.push({
+            note: reminder as ReminderNote,
+            isCompleted,
+            reminderText: cleanReminderPrefix(
+              reminder.parsed_data?.reminder?.reminderSummary ||
+              reminder.parsed_data?.summary ||
+              reminder.transcript
+            ),
+            timeDisplay: this.getReminderTimeDisplay(reminder),
+          });
+        }
+      }
+
+      // Sort: incomplete first
+      return remindersForDate.sort((a, b) => {
+        if (a.isCompleted !== b.isCompleted) {
+          return a.isCompleted ? 1 : -1;
+        }
+        return 0;
+      });
+    } catch (error) {
+      console.error('[ReminderService] Failed to get reminders for date:', error);
       return [];
     }
   }
@@ -400,8 +544,17 @@ class ReminderService {
    */
   private shouldShowReminderToday(reminder: ReminderNote, today: Date): boolean {
     const todayDay = today.getDay(); // 0 = Sunday
+    const todayNormalized = new Date(today);
+    todayNormalized.setHours(0, 0, 0, 0);
 
     if (reminder.reminder_type === 'one-time') {
+      // If completed, only show on the completion date (not on future dates)
+      if (reminder.reminder_completed_at) {
+        const completionDate = this.parseLocalDate(reminder.reminder_completed_at);
+        completionDate.setHours(0, 0, 0, 0);
+        return completionDate.getTime() === todayNormalized.getTime();
+      }
+
       // No event_date = show every day until completed
       if (!reminder.event_date) return true;
 
@@ -409,7 +562,7 @@ class ReminderService {
       eventDate.setHours(0, 0, 0, 0);
 
       // Show if event is today OR in the past (pending tasks roll over)
-      return eventDate.getTime() <= today.getTime();
+      return eventDate.getTime() <= todayNormalized.getTime();
     }
 
     if (reminder.reminder_type === 'recurring') {
@@ -514,23 +667,17 @@ class ReminderService {
 
       const todayStr = new Date().toISOString().split('T')[0];
 
-      // Get the note to check if it's one-time or recurring
+      // Get the note to check its type
       const { data: note } = await supabase
         .from('notes')
-        .select('reminder_type')
+        .select('reminder_type, is_reminder, note_type')
         .eq('id', noteId)
         .single();
 
-      if (note?.reminder_type === 'one-time') {
-        // For one-time reminders, mark as completed permanently
-        await supabase
-          .from('notes')
-          .update({
-            reminder_completed_at: new Date().toISOString(),
-            reminder_active: false
-          })
-          .eq('id', noteId);
-      } else {
+      // Check if this is an unscheduled task (note_type = 'task', is_reminder = false)
+      const isUnscheduledTask = !note?.is_reminder && note?.note_type === 'task';
+
+      if (note?.reminder_type === 'recurring') {
         // For recurring reminders, add to completions table
         await supabase
           .from('reminder_completions')
@@ -539,6 +686,15 @@ class ReminderService {
             user_id: user.id,
             completed_date: todayStr,
           });
+      } else {
+        // For one-time reminders AND unscheduled tasks, mark as completed
+        await supabase
+          .from('notes')
+          .update({
+            reminder_completed_at: new Date().toISOString(),
+            reminder_active: isUnscheduledTask ? false : false // Both become inactive
+          })
+          .eq('id', noteId);
       }
 
       // Update last reminded timestamp
@@ -567,20 +723,11 @@ class ReminderService {
       // Get the note
       const { data: note } = await supabase
         .from('notes')
-        .select('reminder_type')
+        .select('reminder_type, is_reminder, note_type')
         .eq('id', noteId)
         .single();
 
-      if (note?.reminder_type === 'one-time') {
-        // Reactivate one-time reminder
-        await supabase
-          .from('notes')
-          .update({
-            reminder_completed_at: null,
-            reminder_active: true
-          })
-          .eq('id', noteId);
-      } else {
+      if (note?.reminder_type === 'recurring') {
         // Remove from completions table
         await supabase
           .from('reminder_completions')
@@ -588,6 +735,15 @@ class ReminderService {
           .eq('note_id', noteId)
           .eq('user_id', user.id)
           .eq('completed_date', todayStr);
+      } else {
+        // Reactivate one-time reminder OR unscheduled task
+        await supabase
+          .from('notes')
+          .update({
+            reminder_completed_at: null,
+            reminder_active: true
+          })
+          .eq('id', noteId);
       }
 
       return true;

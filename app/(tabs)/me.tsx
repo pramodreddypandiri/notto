@@ -8,7 +8,8 @@
  * - Inferred interests and preferences
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -51,9 +52,11 @@ export default function MeScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [recentMetrics, setRecentMetrics] = useState<ProductivityMetrics[]>([]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const loadData = async () => {
     try {

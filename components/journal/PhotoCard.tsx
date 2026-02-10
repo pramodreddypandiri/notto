@@ -39,13 +39,14 @@ interface PhotoCardProps {
   photo: JournalPhoto;
   index: number;
   onDelete: (id: string) => void;
+  onEditCaption: (id: string, caption: string) => void;
   onPress?: (photo: JournalPhoto) => void;
 }
 
 const SWIPE_THRESHOLD = 80;
 const DELETE_THRESHOLD = 120;
 
-export function PhotoCard({ photo, index, onDelete, onPress }: PhotoCardProps) {
+export function PhotoCard({ photo, index, onDelete, onEditCaption, onPress }: PhotoCardProps) {
   const { isDark } = useTheme();
   const themedColors = getThemedColors(isDark);
 
@@ -119,13 +120,17 @@ export function PhotoCard({ photo, index, onDelete, onPress }: PhotoCardProps) {
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
 
     if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
+
+    // For photos older than 24 hours, show the date
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+    });
   };
 
   const handleMenuPress = () => {
@@ -135,6 +140,28 @@ export function PhotoCard({ photo, index, onDelete, onPress }: PhotoCardProps) {
       undefined,
       [
         { text: 'Cancel', style: 'cancel' },
+        {
+          text: photo.caption ? 'Edit Caption' : 'Add Caption',
+          onPress: () => {
+            Alert.prompt(
+              photo.caption ? 'Edit Caption' : 'Add Caption',
+              'Enter a caption for this photo',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Save',
+                  onPress: (newCaption) => {
+                    if (newCaption !== undefined) {
+                      onEditCaption(photo.id, newCaption.trim());
+                    }
+                  },
+                },
+              ],
+              'plain-text',
+              photo.caption || ''
+            );
+          },
+        },
         {
           text: 'Delete',
           style: 'destructive',

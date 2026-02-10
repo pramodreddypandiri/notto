@@ -10,7 +10,8 @@
  * - Sign out
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -94,12 +95,14 @@ export default function ProfileScreen() {
   const { isDark, themeMode, setThemeMode } = useTheme();
   const themedColors = getThemedColors(isDark);
 
-  useEffect(() => {
-    loadUserData();
-    loadSoundPreference();
-    loadProfile();
-    loadPreferences();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadUserData();
+      loadSoundPreference();
+      loadProfile();
+      loadPreferences();
+    }, [])
+  );
 
   const loadProfile = async () => {
     try {

@@ -118,6 +118,15 @@ export default function JournalScreen() {
     }
   };
 
+  // Handle edit caption
+  const handleEditCaption = async (photoId: string, caption: string) => {
+    const success = await journalService.updatePhotoCaption(photoId, caption);
+    if (success) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      loadData();
+    }
+  };
+
   // Handle add photo
   const handleAddPhoto = async (
     imageUri: string,
@@ -148,6 +157,7 @@ export default function JournalScreen() {
       photo={item}
       index={index}
       onDelete={handleDeletePhoto}
+      onEditCaption={handleEditCaption}
       onPress={(photo) => {
         // Could open a detail view in the future
         console.log('Photo pressed:', photo.id);
