@@ -34,6 +34,7 @@ import { CategoryFilter, FilterOption } from '../../components/journal/CategoryF
 import { CameraView } from '../../components/journal/CameraView';
 import { InsightsView } from '../../components/journal/InsightsView';
 import { EmptyJournalState } from '../../components/journal/EmptyJournalState';
+import { PhotoPreview } from '../../components/journal/PhotoPreview';
 
 // Services
 import journalService, {
@@ -62,6 +63,7 @@ export default function JournalScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<JournalPhoto | null>(null);
 
   // Load photos and stats
   const loadData = async () => {
@@ -159,8 +161,8 @@ export default function JournalScreen() {
       onDelete={handleDeletePhoto}
       onEditCaption={handleEditCaption}
       onPress={(photo) => {
-        // Could open a detail view in the future
-        console.log('Photo pressed:', photo.id);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setSelectedPhoto(photo);
       }}
     />
   );
@@ -336,6 +338,13 @@ export default function JournalScreen() {
           onCapture={handleAddPhoto}
         />
       </Modal>
+
+      {/* Photo Preview Modal */}
+      <PhotoPreview
+        photo={selectedPhoto}
+        visible={selectedPhoto !== null}
+        onClose={() => setSelectedPhoto(null)}
+      />
     </View>
   );
 }
