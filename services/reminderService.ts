@@ -12,6 +12,18 @@ const cleanReminderPrefix = (text: string): string => {
     .trim();
 };
 
+export interface EnrichmentLink {
+  title: string;
+  url: string;
+  source: string;
+}
+
+export interface EnrichmentData {
+  links?: EnrichmentLink[];
+  tips?: string[];
+  estimatedDuration?: number;
+}
+
 export interface ReminderNote {
   id: string;
   user_id: string;
@@ -30,6 +42,7 @@ export interface ReminderNote {
   last_reminded_at: string | null;
   reminder_completed_at: string | null;
   created_at: string;
+  enrichment_data?: EnrichmentData;
 }
 
 export interface TodaysReminder {

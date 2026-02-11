@@ -18,6 +18,7 @@ import {
   RefreshControl,
   Alert,
   StatusBar,
+  Linking,
 } from 'react-native';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -295,6 +296,36 @@ export default function RemindersScreen() {
             </View>
           )}
         </View>
+
+        {/* Quick Links from enrichment data */}
+        {item.note.enrichment_data?.links && item.note.enrichment_data.links.length > 0 && (
+          <View style={styles.linksContainer}>
+            {item.note.enrichment_data.links.map((link, linkIndex) => (
+              <AnimatedPressable
+                key={linkIndex}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  Linking.openURL(link.url).catch(err => console.error('Failed to open URL:', err));
+                }}
+                style={[styles.linkBadge, { backgroundColor: isDark ? colors.primary[900] + '30' : colors.primary[50] }]}
+                hapticType="light"
+              >
+                <Ionicons
+                  name={link.source === 'amazon' ? 'cart-outline' : 'link-outline'}
+                  size={12}
+                  color={colors.primary[500]}
+                />
+                <Text
+                  style={[styles.linkText, { color: colors.primary[600] }]}
+                  numberOfLines={1}
+                >
+                  {link.title}
+                </Text>
+                <Ionicons name="open-outline" size={10} color={themedColors.text.tertiary} />
+              </AnimatedPressable>
+            ))}
+          </View>
+        )}
       </View>
 
       {/* Actions */}
@@ -577,6 +608,26 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: typography.fontSize.xs,
     maxWidth: 120,
+  },
+  linksContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[2],
+    marginTop: spacing[2],
+  },
+  linkBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing[2],
+    paddingVertical: 4,
+    borderRadius: borderRadius.md,
+    gap: 4,
+    maxWidth: '100%',
+  },
+  linkText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    flexShrink: 1,
   },
   actions: {
     flexDirection: 'row',
