@@ -206,9 +206,16 @@ const calculateRelativeTime = (amount: number, unit: 'minutes' | 'hours' | 'days
 const detectReminderLocally = (transcript: string): ParsedReminder | null => {
   const lower = transcript.toLowerCase();
 
-  // Check for reminder keywords
-  const isReminder = /\b(remind|reminder|don't forget|notify|alert)\b/i.test(lower);
-  if (!isReminder) return null;
+  // Check for explicit reminder keywords
+  const hasExplicitKeyword = /\b(remind|reminder|don't forget|notify|alert)\b/i.test(lower);
+
+  // Check for relative time expressions ("in 45 minutes", "after 2 hours")
+  // These are implicit reminder intent — if someone says "X in 45 minutes", they want a notification
+  const hasRelativeTime = /\b(?:in|after)\s+(?:\d+|a|an|one|half\s+an?)\s*(?:minutes?|mins?|hours?|hrs?|hour)\b/i.test(lower)
+    || /\b(?:in|after)\s+(?:thirty|fifteen|forty-?five)\s*(?:minutes?|mins?)\b/i.test(lower)
+    || /\b(?:for|set\s+timer\s+for)\s+\d+\s*(?:minutes?|mins?|hours?|hrs?)\b/i.test(lower);
+
+  if (!hasExplicitKeyword && !hasRelativeTime) return null;
 
   const reminder: ParsedReminder = { isReminder: true };
 

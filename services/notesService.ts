@@ -29,10 +29,15 @@ const autoDetectReminder = (transcript: string): { isReminder: boolean; timeExtr
   // It's a reminder if:
   // 1. Has reminder intent keywords AND has a time reference
   // 2. OR has strong reminder keywords (remind, reminder, don't forget) regardless of time
+  // 3. OR has a relative time expression (e.g. "in 45 minutes") — the time IS the intent
   const strongReminderKeywords = ['remind', 'reminder', 'don\'t forget', 'dont forget'];
   const hasStrongIntent = strongReminderKeywords.some(kw => transcript.toLowerCase().includes(kw));
 
-  const isReminder = (hasIntent && timeExtraction.hasTime) || hasStrongIntent;
+  // Relative time expressions like "in 45 minutes", "after 2 hours" are inherently reminders
+  const hasRelativeTime = /\b(?:in|after)\s+(?:\d+|a|an|one|half\s+an?)\s*(?:minutes?|mins?|hours?|hrs?|hour)\b/i.test(transcript)
+    || /\b(?:for|set\s+timer\s+for)\s+\d+\s*(?:minutes?|mins?|hours?|hrs?)\b/i.test(transcript);
+
+  const isReminder = (hasIntent && timeExtraction.hasTime) || hasStrongIntent || hasRelativeTime;
 
   return { isReminder, timeExtraction };
 };
@@ -276,6 +281,29 @@ export const createNoteWithReminder = async (
           .from('notes')
           .update({ reminder_time: reminderDisplayText })
           .eq('id', data.id);
+      } else {
+        // Fallback: new reminder path returned no scheduled IDs.
+        // Try local time extraction to schedule a direct notification.
+        const fallbackExtraction = notificationService.extractTimeFromText(transcript);
+        if (fallbackExtraction.hasTime && fallbackExtraction.reminderInfo?.isValid) {
+          const { reminderInfo } = fallbackExtraction;
+          if (isValidDate(reminderInfo.date)) {
+            const noteDisplayText = parsedData.summary || transcript;
+            notificationId = await notificationService.scheduleReminderForDate(
+              noteDisplayText,
+              data.id,
+              reminderInfo.date
+            );
+            reminderDisplayText = reminderInfo.displayText;
+            await supabase
+              .from('notes')
+              .update({
+                reminder_time: reminderInfo.date.toISOString(),
+                notification_id: notificationId,
+              })
+              .eq('id', data.id);
+          }
+        }
       }
     }
 

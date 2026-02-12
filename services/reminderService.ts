@@ -73,7 +73,13 @@ class ReminderService {
         // Schedule notifications for X days before the event
         // Parse date as local time (not UTC) to avoid timezone shift
         const eventDate = this.parseLocalDate(reminder.eventDate);
-        const daysBefore = reminder.reminderDaysBefore || 1;
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+
+        // Check if this is a same-day / relative-time reminder (e.g. "in 45 minutes")
+        // For same-day events, skip the "days before" logic and schedule directly at the target time
+        const isSameDay = eventDate.getTime() === today.getTime();
+        const daysBefore = isSameDay ? 0 : (reminder.reminderDaysBefore || 1);
 
         // Schedule notification for each day before (including the day itself)
         for (let i = daysBefore; i >= 0; i--) {
@@ -88,7 +94,7 @@ class ReminderService {
             // Only schedule if in the future
             if (reminderDate > new Date()) {
               const daysText = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : `In ${i} days`;
-              const title = i === 0 ? '📅 Event Today!' : `⏰ Upcoming Event (${daysText})`;
+              const title = i === 0 ? '⏰ Reminder' : `⏰ Upcoming Event (${daysText})`;
 
               const notifId = await notificationService.scheduleNotification(
                 title,
