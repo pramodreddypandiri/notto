@@ -387,11 +387,7 @@ class ReminderService {
           todaysReminders.push({
             note: reminder as ReminderNote,
             isCompleted,
-            reminderText: cleanReminderPrefix(
-              reminder.parsed_data?.reminder?.reminderSummary ||
-              reminder.parsed_data?.summary ||
-              reminder.transcript
-            ),
+            reminderText: cleanReminderPrefix(reminder.transcript),
             timeDisplay: isUnscheduledTask ? 'Anytime' : this.getReminderTimeDisplay(reminder),
           });
         }
@@ -482,11 +478,7 @@ class ReminderService {
           remindersForDate.push({
             note: reminder as ReminderNote,
             isCompleted,
-            reminderText: cleanReminderPrefix(
-              reminder.parsed_data?.reminder?.reminderSummary ||
-              reminder.parsed_data?.summary ||
-              reminder.transcript
-            ),
+            reminderText: cleanReminderPrefix(reminder.transcript),
             timeDisplay: this.getReminderTimeDisplay(reminder),
           });
         }
