@@ -105,14 +105,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="me"
         options={{
-          title: 'Me',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon
-              name={focused ? 'person' : 'person-outline'}
-              color={color}
-              focused={focused}
-            />
-          ),
+          href: null, // Hidden - removed from tab bar
         }}
       />
       {/* Settings tab hidden - accessible via profile icon in TopBar */}
