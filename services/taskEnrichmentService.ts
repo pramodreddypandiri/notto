@@ -1,6 +1,6 @@
 import { supabase } from '../config/supabase';
-import { ENV } from '../config/env';
 import { saveEnrichmentData } from './notesService';
+import { isAIConfigured, callAIForJSON } from './aiService';
 
 export interface EnrichmentLink {
   title: string;
@@ -94,7 +94,7 @@ class TaskEnrichmentService {
     category?: string
   ): Promise<TaskEnrichment | null> {
     try {
-      if (!ENV.CLAUDE_API_KEY || ENV.CLAUDE_API_KEY === '') {
+      if (!isAIConfigured()) {
         return null;
       }
 
@@ -125,34 +125,7 @@ Rules:
 
 Return ONLY valid JSON, no other text.`;
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ENV.CLAUDE_API_KEY,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 512,
-          messages: [{
-            role: 'user',
-            content: prompt,
-          }],
-        }),
-      });
-
-      if (!response.ok) {
-        console.error('Claude API error:', response.status);
-        return null;
-      }
-
-      const data = await response.json();
-      const content = data.content[0].text;
-
-      // Parse JSON from response
-      const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
-      const parsed = JSON.parse(jsonStr);
+      const parsed = await callAIForJSON(prompt, { maxTokens: 512 });
 
       if (!parsed.needsEnrichment) {
         return null;

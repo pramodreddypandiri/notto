@@ -2,8 +2,8 @@
 // DO NOT commit env.ts to git (it's in .gitignore)
 
 export const ENV = {
-  // Get from: https://console.anthropic.com
-  CLAUDE_API_KEY: 'sk-ant-YOUR_CLAUDE_API_KEY_HERE',
+  // Get from: https://platform.deepseek.com
+  DEEPSEEK_API_KEY: 'sk-YOUR_DEEPSEEK_API_KEY_HERE',
 
   // Get from: https://platform.openai.com
   OPENAI_API_KEY: 'sk-YOUR_OPENAI_API_KEY_HERE',

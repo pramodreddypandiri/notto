@@ -6,9 +6,9 @@ import Constants from 'expo-constants';
 const extra = Constants.expoConfig?.extra || {};
 
 export const ENV = {
-  // Get from: https://console.anthropic.com
-  // Set via: eas secret:create --name CLAUDE_API_KEY --value "your-key"
-  CLAUDE_API_KEY: extra.CLAUDE_API_KEY || process.env.EXPO_PUBLIC_CLAUDE_API_KEY || '',
+  // Get from: https://platform.deepseek.com
+  // Set via: eas secret:create --name DEEPSEEK_API_KEY --value "your-key"
+  DEEPSEEK_API_KEY: extra.DEEPSEEK_API_KEY || process.env.EXPO_PUBLIC_DEEPSEEK_API_KEY || '',
 
   // Get from: https://platform.openai.com
   // Set via: eas secret:create --name OPENAI_API_KEY --value "your-key"

@@ -50,7 +50,7 @@ import soundService from '../../services/soundService';
 import notificationService from '../../services/notificationService';
 import reminderService from '../../services/reminderService';
 import { getUserProfile } from '../../services/profileService';
-import { ENV } from '../../config/env';
+import { isAIConfigured, callAIForJSON } from '../../services/aiService';
 
 // Demo mode
 const DEMO_MODE = false;
@@ -87,34 +87,14 @@ const getRandomTip = (): SmartTip => {
 
 const generatePersonalizedTip = async (noteSummaries: string[]): Promise<SmartTip | null> => {
   try {
-    if (!ENV.CLAUDE_API_KEY || ENV.CLAUDE_API_KEY === '') return null;
+    if (!isAIConfigured()) return null;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ENV.CLAUDE_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 128,
-        messages: [{
-          role: 'user',
-          content: `You are a witty personal assistant. Based on these recent voice notes from a user:
+    const prompt = `You are a witty personal assistant. Based on these recent voice notes from a user:
 ${noteSummaries.map(s => `- ${s}`).join('\n')}
 
-Give ONE short funny/witty personalized recommendation or observation about their life (under 120 characters). Be playful and specific to their notes. Don't start with "Hey", "Tip:", "Pro tip:", or greetings. Also pick ONE emoji that fits. Return ONLY valid JSON: {"text": "...", "emoji": "..."}`,
-        }],
-      }),
-    });
+Give ONE short funny/witty personalized recommendation or observation about their life (under 120 characters). Be playful and specific to their notes. Don't start with "Hey", "Tip:", "Pro tip:", or greetings. Also pick ONE emoji that fits. Return ONLY valid JSON: {"text": "...", "emoji": "..."}`;
 
-    if (!response.ok) return null;
-
-    const data = await response.json();
-    const content = data.content[0].text;
-    const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
-    const parsed = JSON.parse(jsonStr);
+    const parsed = await callAIForJSON<SmartTip>(prompt, { maxTokens: 128 });
     if (parsed.text && parsed.emoji) return parsed;
     return null;
   } catch {

@@ -8,11 +8,10 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ENV } from '../config/env';
 import { buildAIProfileContext } from './profileService';
 import { JournalPhoto, JournalStats, getRecentPhotos, getStats } from './journalService';
+import { isAIConfigured, callAIForJSON } from './aiService';
 
-const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 const INSIGHTS_CACHE_KEY = '@journal_insights_cache';
 const INSIGHTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -34,11 +33,9 @@ interface InsightsCache {
 }
 
 /**
- * Check if Claude API is configured
+ * Check if AI API is configured
  */
-function isClaudeConfigured(): boolean {
-  return !!(ENV.CLAUDE_API_KEY && ENV.CLAUDE_API_KEY !== 'sk-ant-YOUR_CLAUDE_API_KEY_HERE');
-}
+const isClaudeConfigured = isAIConfigured;
 
 /**
  * Get cached insights if still valid
@@ -204,20 +201,7 @@ export async function generateInsights(forceRefresh: boolean = false): Promise<I
       })),
     };
 
-    const response = await fetch(CLAUDE_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ENV.CLAUDE_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2048,
-        messages: [
-          {
-            role: 'user',
-            content: `You are a wellness assistant analyzing a user's photo journal to provide insights and suggestions.
+    const prompt = `You are a wellness assistant analyzing a user's photo journal to provide insights and suggestions.
 
 ${profileContext}
 
@@ -275,35 +259,9 @@ GUIDELINES:
 - Suggestions should be specific and actionable
 - Focus on positive well-being, not criticism
 - Keep understanding to 2-3 sentences max
-- Keep each suggestion to 1 sentence`,
-          },
-        ],
-      }),
-    });
+- Keep each suggestion to 1 sentence`;
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('Claude API error:', data);
-      throw new Error('API request failed');
-    }
-
-    // Extract JSON from response
-    let fullText = '';
-    for (const block of data.content) {
-      if (block.type === 'text') {
-        fullText += block.text;
-      }
-    }
-
-    // Parse JSON
-    let jsonStr = fullText.replace(/```json\n?|\n?```/g, '').trim();
-    const jsonArrayMatch = jsonStr.match(/\[[\s\S]*\]/);
-    if (jsonArrayMatch) {
-      jsonStr = jsonArrayMatch[0];
-    }
-
-    const parsed = JSON.parse(jsonStr);
+    const parsed = await callAIForJSON(prompt, { maxTokens: 2048 });
     const now = new Date().toISOString();
 
     const insights: Insight[] = parsed.map((item: any) => ({

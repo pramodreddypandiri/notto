@@ -1,8 +1,6 @@
 import { buildAIProfileContext } from './profileService';
-import { ENV } from '../config/env';
 import { STORE_CHAINS } from './locationService';
-
-const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
+import { isAIConfigured, callAIForJSON, callAI } from './aiService';
 
 // Location-based note categories
 export type NoteLocationCategory =
@@ -57,10 +55,8 @@ interface ParsedNote {
   placeIntent?: PlaceIntent;
 }
 
-// Check if Claude API is configured
-const isClaudeConfigured = (): boolean => {
-  return !!(ENV.CLAUDE_API_KEY && ENV.CLAUDE_API_KEY !== 'sk-ant-YOUR_CLAUDE_API_KEY_HERE');
-};
+// Check if AI API is configured
+const isClaudeConfigured = isAIConfigured;
 
 // Local detection of note categories (no AI needed for common patterns)
 const detectLocationCategoryLocally = (transcript: string): { category: NoteLocationCategory; items: string[] } => {
@@ -456,20 +452,7 @@ export const parseNote = async (transcript: string): Promise<ParsedNote> => {
   }
 
   try {
-    const response = await fetch(CLAUDE_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ENV.CLAUDE_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
-        messages: [
-          {
-            role: 'user',
-            content: `Parse this voice note into structured data. Return ONLY valid JSON.
+    const prompt = `Parse this voice note into structured data. Return ONLY valid JSON.
 
 Voice note: "${transcript}"
 
@@ -535,18 +518,9 @@ Examples:
 "Remind me after 2 hours to call mom" -> {"type": "reminder", "summary": "Call mom", "reminder": {"isReminder": true, "reminderType": "one-time", "eventDate": "TODAY_OR_TOMORROW_DATE", "recurrenceTime": "CURRENT_TIME_PLUS_2_HOURS", "reminderSummary": "Call mom"}}
 "I'm out of milk" -> {"type": "task", "summary": "Buy: milk", "locationCategory": "grocery", "shoppingItems": ["milk"]}
 "I want to go to a salon" -> {"type": "intent", "summary": "Visit a salon", "placeIntent": {"detected": true, "searchQuery": "salon", "placeType": "salon"}}
-"Need to find a good dentist" -> {"type": "intent", "summary": "Find a dentist", "placeIntent": {"detected": true, "searchQuery": "good dentist", "placeType": "dentist"}}`,
-          },
-        ],
-      }),
-    });
+"Need to find a good dentist" -> {"type": "intent", "summary": "Find a dentist", "placeIntent": {"detected": true, "searchQuery": "good dentist", "placeType": "dentist"}}`;
 
-    const data = await response.json();
-    const content = data.content[0].text;
-
-    // Remove markdown code blocks if present
-    const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
-    const parsed = JSON.parse(jsonStr);
+    const parsed = await callAIForJSON(prompt);
 
     // Use local detection as fallback if AI didn't detect a category
     if (!parsed.locationCategory && localCategory) {
@@ -596,9 +570,9 @@ export const generatePlaceSuggestions = async (
   userLocation: { lat: number; lng: number; city: string },
   pastFeedback?: { name: string; status: 'liked' | 'disliked' }[]
 ): Promise<PlaceSuggestion[]> => {
-  // Check if Claude API is configured
-  if (!isClaudeConfigured()) {
-    throw new Error('Claude API key not configured. Please add your key to config/env.ts');
+  // Check if AI API is configured
+  if (!isAIConfigured()) {
+    throw new Error('DeepSeek API key not configured. Please add your key to config/env.ts');
   }
 
   try {
@@ -614,20 +588,7 @@ export const generatePlaceSuggestions = async (
       ? pastFeedback.map(f => `${f.name}: ${f.status}`).join('\n')
       : 'No previous feedback';
 
-    const response = await fetch(CLAUDE_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ENV.CLAUDE_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        messages: [
-          {
-            role: 'user',
-            content: `You are a personalized place recommendation assistant. Suggest 5-8 places that match this user's interests and personality.
+    const prompt = `You are a personalized place recommendation assistant. Suggest 5-8 places that match this user's interests and personality.
 
 ${profileContext}
 
@@ -688,52 +649,9 @@ Return ONLY valid JSON array:
 
 Categories: activity, food, park, shopping, entertainment, fitness, cafe, bar, other
 Price ranges: $, $$, $$$, $$$$
-Sources: notes (from their voice notes), personality (from their profile), trending (discovery)`,
-          },
-        ],
-      }),
-    });
+Sources: notes (from their voice notes), personality (from their profile), trending (discovery)`;
 
-    const data = await response.json();
-
-    // Check for API errors
-    if (!response.ok) {
-      console.error('Claude API error:', data);
-      throw new Error(data.error?.message || `API request failed with status ${response.status}`);
-    }
-
-    // Check if content exists
-    if (!data.content || !Array.isArray(data.content)) {
-      console.error('Unexpected API response:', data);
-      throw new Error('Invalid API response structure');
-    }
-
-    // Extract text content from all blocks
-    let fullText = '';
-    for (const block of data.content) {
-      if (block.type === 'text') {
-        fullText += block.text;
-      }
-    }
-
-    // Log the raw response for debugging
-    console.log('[generatePlaceSuggestions] Raw response:', fullText.substring(0, 200) + '...');
-
-    // Remove markdown code blocks and any leading/trailing text
-    let jsonStr = fullText.replace(/```json\n?|\n?```/g, '').trim();
-
-    // Try to extract JSON array if there's extra text
-    const jsonArrayMatch = jsonStr.match(/\[[\s\S]*\]/);
-    if (jsonArrayMatch) {
-      jsonStr = jsonArrayMatch[0];
-    }
-
-    try {
-      return JSON.parse(jsonStr);
-    } catch (parseError) {
-      console.error('Failed to parse JSON response:', jsonStr.substring(0, 500));
-      throw new Error('Failed to parse place suggestions response');
-    }
+    return await callAIForJSON<PlaceSuggestion[]>(prompt, { maxTokens: 4096 });
   } catch (error) {
     console.error('Failed to generate place suggestions:', error);
     throw error;

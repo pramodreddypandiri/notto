@@ -97,12 +97,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="plans"
-        options={{
-          href: null, // Hide from tab bar
-        }}
-      />
-      <Tabs.Screen
         name="me"
         options={{
           href: null, // Hidden - removed from tab bar

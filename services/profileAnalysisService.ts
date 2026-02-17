@@ -10,6 +10,7 @@
  */
 
 import { supabase } from '../config/supabase';
+import { callAIForJSON } from './aiService';
 import {
   addInferredInterest,
   addInferredDislike,
@@ -207,38 +208,7 @@ Guidelines:
 - Look for emotional cues for mood_signals
 - Extract specific cuisine/food preferences mentioned`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.CLAUDE_API_KEY || '',
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
-    });
-
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('Claude API error:', data.error);
-      return null;
-    }
-
-    const content = data.content?.[0]?.text;
-    if (!content) return null;
-
-    // Parse JSON from response
-    const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
-    return JSON.parse(jsonStr) as AnalysisResult;
+    return await callAIForJSON<AnalysisResult>(prompt);
   } catch (error) {
     console.error('Failed to call Claude for analysis:', error);
     return null;
@@ -272,37 +242,7 @@ Return ONLY valid JSON:
 
 Only include items with clear evidence. Keep arrays short and specific.`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.CLAUDE_API_KEY || '',
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 256,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
-    });
-
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('Claude API error:', data.error);
-      return null;
-    }
-
-    const content = data.content?.[0]?.text;
-    if (!content) return null;
-
-    const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
-    return JSON.parse(jsonStr);
+    return await callAIForJSON(prompt, { maxTokens: 256 });
   } catch (error) {
     console.error('Failed to call Claude for quick analysis:', error);
     return null;

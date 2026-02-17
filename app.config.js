@@ -79,7 +79,7 @@ export default {
     extra: {
       router: {},
       // Environment variables from EAS Secrets
-      CLAUDE_API_KEY: process.env.CLAUDE_API_KEY || '',
+      DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
       OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
       GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY || '',
       eas: {
