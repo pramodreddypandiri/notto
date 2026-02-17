@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,11 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../config/supabase';
 import { useTheme } from '../../context/ThemeContext';
 import { getThemedColors } from '../../theme';
@@ -22,22 +24,11 @@ export default function SignUpScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [appleLoading, setAppleLoading] = useState(false);
-  const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
   const router = useRouter();
 
   // Theme
   const { isDark } = useTheme();
   const themedColors = getThemedColors(isDark);
-
-  // Check Apple Sign In availability on mount
-  useEffect(() => {
-    const checkAppleSignIn = async () => {
-      const available = await authService.isAppleSignInAvailable();
-      setAppleSignInAvailable(available);
-    };
-    checkAppleSignIn();
-  }, []);
 
   const handleSignUp = async () => {
     if (!name || !email || !password || !confirmPassword) {
@@ -96,173 +87,145 @@ export default function SignUpScreen() {
     }
   };
 
-  const handleAppleSignIn = async () => {
-    setAppleLoading(true);
-    try {
-      const result = await authService.signInWithApple();
-      if (result.success) {
-        // @ts-ignore
-        router.replace('/(tabs)');
-      } else if (result.error && result.error !== 'Sign in was cancelled') {
-        Alert.alert('Error', result.error);
-      }
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to sign in with Apple');
-    } finally {
-      setAppleLoading(false);
-    }
-  };
-
   return (
-    <View style={[styles.container, { backgroundColor: themedColors.background.primary }]}>
-      <Text style={[styles.title, { color: themedColors.text.primary }]}>Create Account</Text>
-      <Text style={[styles.subtitle, { color: themedColors.text.tertiary }]}>
-        Sign up to get started
-      </Text>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: themedColors.background.primary }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={[styles.title, { color: themedColors.text.primary }]}>Create Account</Text>
+        <Text style={[styles.subtitle, { color: themedColors.text.tertiary }]}>
+          Sign up to get started
+        </Text>
 
-      {/* Apple Sign-In Button (iOS only) */}
-      {appleSignInAvailable && (
+        {/* Google Sign-In Button */}
         <TouchableOpacity
           style={[
             styles.socialButton,
-            styles.appleButton,
+            {
+              backgroundColor: themedColors.surface.primary,
+              borderColor: themedColors.input.border,
+            },
           ]}
-          onPress={handleAppleSignIn}
-          disabled={appleLoading}
+          onPress={handleGoogleSignIn}
+          disabled={googleLoading}
         >
-          {appleLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
+          {googleLoading ? (
+            <ActivityIndicator size="small" color={themedColors.text.primary} />
           ) : (
             <>
-              <Ionicons name="logo-apple" size={20} color="#fff" style={styles.appleIcon} />
-              <Text style={[styles.socialButtonText, styles.appleButtonText]}>
-                Continue with Apple
+              <View style={styles.googleIcon}>
+                <Text style={styles.googleIconText}>G</Text>
+              </View>
+              <Text style={[styles.socialButtonText, { color: themedColors.text.primary }]}>
+                Continue with Google
               </Text>
             </>
           )}
         </TouchableOpacity>
-      )}
 
-      {/* Google Sign-In Button */}
-      <TouchableOpacity
-        style={[
-          styles.socialButton,
-          {
-            backgroundColor: themedColors.surface.primary,
-            borderColor: themedColors.input.border,
-          },
-        ]}
-        onPress={handleGoogleSignIn}
-        disabled={googleLoading}
-      >
-        {googleLoading ? (
-          <ActivityIndicator size="small" color={themedColors.text.primary} />
-        ) : (
-          <>
-            <View style={styles.googleIcon}>
-              <Text style={styles.googleIconText}>G</Text>
-            </View>
-            <Text style={[styles.socialButtonText, { color: themedColors.text.primary }]}>
-              Continue with Google
-            </Text>
-          </>
-        )}
-      </TouchableOpacity>
+        {/* Divider */}
+        <View style={styles.dividerContainer}>
+          <View style={[styles.divider, { backgroundColor: themedColors.input.border }]} />
+          <Text style={[styles.dividerText, { color: themedColors.text.tertiary }]}>or</Text>
+          <View style={[styles.divider, { backgroundColor: themedColors.input.border }]} />
+        </View>
 
-      {/* Divider */}
-      <View style={styles.dividerContainer}>
-        <View style={[styles.divider, { backgroundColor: themedColors.input.border }]} />
-        <Text style={[styles.dividerText, { color: themedColors.text.tertiary }]}>or</Text>
-        <View style={[styles.divider, { backgroundColor: themedColors.input.border }]} />
-      </View>
+        {/* Name/Email/Password Fields */}
+        <TextInput
+          style={[
+            styles.input,
+            {
+              backgroundColor: themedColors.input.background,
+              borderColor: themedColors.input.border,
+              color: themedColors.text.primary,
+            },
+          ]}
+          placeholder="Full Name"
+          placeholderTextColor={themedColors.input.placeholder}
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="words"
+        />
 
-      {/* Name/Email/Password Fields */}
-      <TextInput
-        style={[
-          styles.input,
-          {
-            backgroundColor: themedColors.input.background,
-            borderColor: themedColors.input.border,
-            color: themedColors.text.primary,
-          },
-        ]}
-        placeholder="Full Name"
-        placeholderTextColor={themedColors.input.placeholder}
-        value={name}
-        onChangeText={setName}
-        autoCapitalize="words"
-      />
+        <TextInput
+          style={[
+            styles.input,
+            {
+              backgroundColor: themedColors.input.background,
+              borderColor: themedColors.input.border,
+              color: themedColors.text.primary,
+            },
+          ]}
+          placeholder="Email"
+          placeholderTextColor={themedColors.input.placeholder}
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
 
-      <TextInput
-        style={[
-          styles.input,
-          {
-            backgroundColor: themedColors.input.background,
-            borderColor: themedColors.input.border,
-            color: themedColors.text.primary,
-          },
-        ]}
-        placeholder="Email"
-        placeholderTextColor={themedColors.input.placeholder}
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
+        <TextInput
+          style={[
+            styles.input,
+            {
+              backgroundColor: themedColors.input.background,
+              borderColor: themedColors.input.border,
+              color: themedColors.text.primary,
+            },
+          ]}
+          placeholder="Password"
+          placeholderTextColor={themedColors.input.placeholder}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+        />
 
-      <TextInput
-        style={[
-          styles.input,
-          {
-            backgroundColor: themedColors.input.background,
-            borderColor: themedColors.input.border,
-            color: themedColors.text.primary,
-          },
-        ]}
-        placeholder="Password"
-        placeholderTextColor={themedColors.input.placeholder}
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+        <TextInput
+          style={[
+            styles.input,
+            {
+              backgroundColor: themedColors.input.background,
+              borderColor: themedColors.input.border,
+              color: themedColors.text.primary,
+            },
+          ]}
+          placeholder="Confirm Password"
+          placeholderTextColor={themedColors.input.placeholder}
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          secureTextEntry
+        />
 
-      <TextInput
-        style={[
-          styles.input,
-          {
-            backgroundColor: themedColors.input.background,
-            borderColor: themedColors.input.border,
-            color: themedColors.text.primary,
-          },
-        ]}
-        placeholder="Confirm Password"
-        placeholderTextColor={themedColors.input.placeholder}
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        secureTextEntry
-      />
+        <TouchableOpacity style={styles.button} onPress={handleSignUp} disabled={loading}>
+          <Text style={styles.buttonText}>
+            {loading ? 'Creating account...' : 'Sign Up'}
+          </Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.button} onPress={handleSignUp} disabled={loading}>
-        <Text style={styles.buttonText}>
-          {loading ? 'Creating account...' : 'Sign Up'}
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => router.back()}>
-        <Text style={[styles.link, { color: themedColors.text.tertiary }]}>
-          Already have an account? <Text style={styles.linkBold}>Sign In</Text>
-        </Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={[styles.link, { color: themedColors.text.tertiary }]}>
+            Already have an account? <Text style={styles.linkBold}>Sign In</Text>
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    justifyContent: 'center',
     backgroundColor: '#f5f5f5',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 20,
   },
   title: {
     fontSize: 32,
@@ -283,16 +246,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     marginBottom: 12,
-  },
-  appleButton: {
-    backgroundColor: '#000',
-    borderColor: '#000',
-  },
-  appleIcon: {
-    marginRight: 12,
-  },
-  appleButtonText: {
-    color: '#fff',
   },
   googleIcon: {
     width: 20,

@@ -11,7 +11,6 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.notesapp.voicenotes",
-      usesAppleSignIn: true,
       infoPlist: {
         NSSpeechRecognitionUsageDescription: "This app uses speech recognition to convert your voice notes to text.",
         NSMicrophoneUsageDescription: "This app needs microphone access to record voice notes.",
@@ -63,7 +62,6 @@ export default {
           }
         }
       ],
-      "expo-apple-authentication",
       "expo-speech-recognition",
       [
         "expo-location",

@@ -877,20 +877,26 @@ export default function ProfileScreen() {
         <View style={[styles.bottomSpacer, { paddingBottom: insets.bottom }]} />
       </ScrollView>
 
-      {/* Change Password Modal */}
+      {/* Change Password Modal - Bottom Sheet */}
       <Modal
         visible={showPasswordModal}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setShowPasswordModal(false)}
       >
-        <TouchableWithoutFeedback onPress={() => setShowPasswordModal(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              >
-                <View style={[styles.modalContent, { backgroundColor: themedColors.surface.primary }]}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowPasswordModal(false)}>
+            <View style={styles.bottomSheetOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={[styles.bottomSheetContent, { backgroundColor: themedColors.surface.primary }]}>
+                  {/* Handle bar */}
+                  <View style={styles.bottomSheetHandle}>
+                    <View style={[styles.bottomSheetHandleBar, { backgroundColor: themedColors.text.muted + '40' }]} />
+                  </View>
+
                   <Text style={[styles.modalTitle, { color: themedColors.text.primary }]}>
                     Change Password
                   </Text>
@@ -909,6 +915,7 @@ export default function ProfileScreen() {
                     secureTextEntry
                     value={newPassword}
                     onChangeText={setNewPassword}
+                    autoFocus={false}
                   />
 
                   <TextInput
@@ -927,35 +934,34 @@ export default function ProfileScreen() {
                     onChangeText={setConfirmPassword}
                   />
 
-                  <View style={styles.modalButtons}>
-                    <View style={styles.modalButton}>
-                      <PremiumButton
-                        onPress={() => {
-                          setShowPasswordModal(false);
-                          setNewPassword('');
-                          setConfirmPassword('');
-                        }}
-                        variant="secondary"
-                        fullWidth
-                      >
-                        Cancel
-                      </PremiumButton>
-                    </View>
-                    <View style={styles.modalButton}>
-                      <PremiumButton
-                        onPress={handleChangePassword}
-                        loading={accountLoading}
-                        fullWidth
-                      >
-                        Save
-                      </PremiumButton>
-                    </View>
+                  <View style={styles.bottomSheetButtons}>
+                    <PremiumButton
+                      onPress={handleChangePassword}
+                      loading={accountLoading}
+                      fullWidth
+                    >
+                      Save Password
+                    </PremiumButton>
+                    <PremiumButton
+                      onPress={() => {
+                        setShowPasswordModal(false);
+                        setNewPassword('');
+                        setConfirmPassword('');
+                      }}
+                      variant="secondary"
+                      fullWidth
+                    >
+                      Cancel
+                    </PremiumButton>
                   </View>
+
+                  {/* Extra bottom padding for safe area */}
+                  <View style={{ height: insets.bottom + spacing[2] }} />
                 </View>
-              </KeyboardAvoidingView>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Location Search Modal */}
@@ -1390,6 +1396,31 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[3],
     fontSize: typography.fontSize.base,
     marginBottom: spacing[3],
+  },
+  bottomSheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  bottomSheetContent: {
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[2],
+    paddingBottom: spacing[4],
+  },
+  bottomSheetHandle: {
+    alignItems: 'center',
+    paddingVertical: spacing[3],
+  },
+  bottomSheetHandleBar: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+  },
+  bottomSheetButtons: {
+    gap: spacing[3],
+    marginTop: spacing[4],
   },
   modalButtons: {
     flexDirection: 'row',
