@@ -463,6 +463,24 @@ export const updateNoteTags = async (
   }
 };
 
+export const updateNoteContent = async (
+  noteId: string,
+  updates: { transcript?: string; note_type?: NoteType }
+): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('notes')
+      .update(updates)
+      .eq('id', noteId);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Failed to update note content:', error);
+    return false;
+  }
+};
+
 export const deleteNote = async (noteId: string) => {
   try {
     // Get the note first to cancel any scheduled notification

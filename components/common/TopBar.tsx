@@ -8,20 +8,34 @@
  * - Consistent across all tabs
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import AnimatedPressable from '../ui/AnimatedPressable';
 import { colors, typography, spacing, layout, getThemedColors } from '../../theme';
+import { supabase } from '../../config/supabase';
 
 interface TopBarProps {
   themedColors: ReturnType<typeof getThemedColors>;
   userName?: string;
 }
 
-export function TopBar({ themedColors, userName }: TopBarProps) {
+export function TopBar({ themedColors, userName: userNameProp }: TopBarProps) {
+  const [userName, setUserName] = useState<string | null>(userNameProp || null);
+
+  useEffect(() => {
+    if (userNameProp) return;
+    const fetchName = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const fullName = user?.user_metadata?.full_name;
+      if (fullName) {
+        setUserName(fullName.split(' ')[0]);
+      }
+    };
+    fetchName();
+  }, [userNameProp]);
   // Get time-based greeting
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -67,13 +81,8 @@ export function TopBar({ themedColors, userName }: TopBarProps) {
         />
         <View>
           <Text style={[styles.greeting, { color: themedColors.text.primary }]}>
-            {greeting}
+            {greeting}{userName ? `, ${userName}` : ''}
           </Text>
-          {userName && (
-            <Text style={[styles.userName, { color: themedColors.text.primary }]}>
-              {userName}
-            </Text>
-          )}
         </View>
       </View>
 
@@ -109,11 +118,6 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
-  },
-  userName: {
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    marginTop: spacing[1],
   },
   settingsButton: {
     width: 40,

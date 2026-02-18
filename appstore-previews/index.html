@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Notes — App Store Previews</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+      background: #1c1917;
+      color: #fafafa;
+      padding: 40px;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 28px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .instructions {
+      text-align: center;
+      color: #a8a29e;
+      font-size: 14px;
+      margin-bottom: 40px;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.5;
+    }
+
+    .instructions code {
+      background: #292524;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    .previews {
+      display: flex;
+      gap: 40px;
+      overflow-x: auto;
+      padding: 20px 0 40px;
+      scroll-snap-type: x mandatory;
+    }
+
+    /* ---- Each Preview Frame (1290 x 2796 @ 0.25 scale for display) ---- */
+    .preview {
+      flex-shrink: 0;
+      width: 322px;    /* 1290 * 0.25 */
+      height: 699px;   /* 2796 * 0.25 */
+      scroll-snap-align: center;
+      position: relative;
+    }
+
+    /* The actual exportable area */
+    .preview-canvas {
+      width: 1290px;
+      height: 2796px;
+      transform: scale(0.25);
+      transform-origin: top left;
+      border-radius: 80px;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .preview-number {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 13px;
+      color: #78716c;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ---- Background Gradients ---- */
+    .bg-primary {
+      background: linear-gradient(170deg, #312e81 0%, #1c1917 40%, #0c0a09 100%);
+    }
+    .bg-cool {
+      background: linear-gradient(170deg, #0369a1 0%, #1c1917 40%, #0c0a09 100%);
+    }
+    .bg-warm {
+      background: linear-gradient(170deg, #6d28d9 0%, #1c1917 40%, #0c0a09 100%);
+    }
+    .bg-success {
+      background: linear-gradient(170deg, #047857 0%, #1c1917 40%, #0c0a09 100%);
+    }
+    .bg-rose {
+      background: linear-gradient(170deg, #be185d 0%, #1c1917 40%, #0c0a09 100%);
+    }
+    .bg-amber {
+      background: linear-gradient(170deg, #b45309 0%, #1c1917 40%, #0c0a09 100%);
+    }
+
+    /* ---- Marketing Text Area ---- */
+    .marketing {
+      padding: 140px 80px 60px;
+      text-align: center;
+      z-index: 2;
+    }
+
+    .marketing h2 {
+      font-size: 96px;
+      font-weight: 800;
+      letter-spacing: -2px;
+      line-height: 1.1;
+      color: #ffffff;
+      margin-bottom: 28px;
+    }
+
+    .marketing p {
+      font-size: 48px;
+      font-weight: 400;
+      color: rgba(255,255,255,0.7);
+      line-height: 1.4;
+    }
+
+    /* ---- Device Frame ---- */
+    .device-frame {
+      position: relative;
+      width: 1000px;
+      margin: 40px auto 0;
+      flex: 1;
+      display: flex;
+      justify-content: center;
+    }
+
+    .device-bezel {
+      width: 920px;
+      height: 1880px;
+      background: #1c1917;
+      border-radius: 72px;
+      border: 6px solid #44403c;
+      overflow: hidden;
+      position: relative;
+      box-shadow:
+        0 0 0 2px #292524,
+        0 40px 80px rgba(0,0,0,0.5),
+        inset 0 0 0 2px #292524;
+    }
+
+    /* Dynamic Island */
+    .device-bezel::before {
+      content: '';
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 240px;
+      height: 68px;
+      background: #0c0a09;
+      border-radius: 40px;
+      z-index: 10;
+    }
+
+    /* ---- Screenshot Placeholder ---- */
+    .screenshot-slot {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Real screenshot images fill the entire bezel */
+    .screenshot-slot > img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+      display: block;
+    }
+
+    /* ---- Mock UI Screens ---- */
+    .mock-status-bar {
+      width: 100%;
+      height: 110px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 0 48px 16px;
+      font-size: 32px;
+      font-weight: 600;
+      color: #fafafa;
+    }
+
+    .mock-screen {
+      flex: 1;
+      width: 100%;
+      padding: 0 36px;
+      overflow: hidden;
+    }
+
+    /* Screen 1: Home/Voice Notes */
+    .screen-home { background: #0c0a09; }
+    .screen-home .greeting {
+      font-size: 56px;
+      font-weight: 700;
+      color: #fafafa;
+      margin: 20px 0 8px;
+    }
+    .screen-home .greeting-sub {
+      font-size: 32px;
+      color: #78716c;
+      margin-bottom: 40px;
+    }
+    .screen-home .section-title {
+      font-size: 36px;
+      font-weight: 600;
+      color: #d6d3d1;
+      margin-bottom: 24px;
+    }
+    .note-card {
+      background: #1c1917;
+      border-radius: 24px;
+      padding: 36px;
+      margin-bottom: 20px;
+      border: 1px solid #292524;
+    }
+    .note-card .note-text {
+      font-size: 30px;
+      color: #d6d3d1;
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+    .note-card .note-meta {
+      font-size: 24px;
+      color: #78716c;
+    }
+    .note-card .note-tag {
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 12px;
+      font-size: 22px;
+      font-weight: 600;
+      margin-right: 8px;
+    }
+    .tag-task { background: #eef2ff; color: #4f46e5; }
+    .tag-reminder { background: #fdf2f8; color: #be185d; }
+
+    .voice-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 140px;
+      background: #1c1917;
+      border-top: 1px solid #292524;
+      display: flex;
+      align-items: center;
+      padding: 0 36px;
+      gap: 20px;
+    }
+    .voice-bar .text-input {
+      flex: 1;
+      height: 80px;
+      background: #292524;
+      border-radius: 40px;
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      font-size: 28px;
+      color: #78716c;
+    }
+    .voice-bar .mic-btn {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .voice-bar .mic-btn svg { width: 36px; height: 36px; }
+
+    /* Screen 2: Tasks */
+    .screen-tasks { background: #0c0a09; }
+    .tasks-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 20px 0 32px;
+    }
+    .tasks-header h3 {
+      font-size: 48px;
+      font-weight: 700;
+      color: #fafafa;
+    }
+    .tasks-date {
+      font-size: 28px;
+      color: #6366f1;
+      font-weight: 600;
+    }
+    .task-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+      padding: 32px 0;
+      border-bottom: 1px solid #292524;
+    }
+    .task-checkbox {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 3px solid #44403c;
+      flex-shrink: 0;
+      margin-top: 4px;
+    }
+    .task-checkbox.checked {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-color: #6366f1;
+      position: relative;
+    }
+    .task-checkbox.checked::after {
+      content: '✓';
+      color: white;
+      font-size: 28px;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .task-content h4 {
+      font-size: 32px;
+      font-weight: 600;
+      color: #d6d3d1;
+      margin-bottom: 8px;
+    }
+    .task-content h4.completed {
+      text-decoration: line-through;
+      color: #78716c;
+    }
+    .task-content .task-time {
+      font-size: 26px;
+      color: #78716c;
+    }
+    .task-content .task-location {
+      font-size: 24px;
+      color: #6366f1;
+      margin-top: 4px;
+    }
+
+    /* Screen 3: Journal */
+    .screen-journal { background: #0c0a09; }
+    .journal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 20px 0 24px;
+    }
+    .journal-header h3 {
+      font-size: 48px;
+      font-weight: 700;
+      color: #fafafa;
+    }
+    .filter-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .filter-chip {
+      padding: 14px 28px;
+      border-radius: 40px;
+      font-size: 26px;
+      font-weight: 600;
+      background: #1c1917;
+      color: #a8a29e;
+      border: 1px solid #292524;
+    }
+    .filter-chip.active {
+      background: #6366f1;
+      color: #fff;
+      border-color: #6366f1;
+    }
+    .journal-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .journal-photo {
+      border-radius: 24px;
+      overflow: hidden;
+      position: relative;
+    }
+    .journal-photo .photo-placeholder {
+      width: 100%;
+      aspect-ratio: 0.8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 80px;
+    }
+    .photo-bg-1 { background: linear-gradient(135deg, #fde68a, #fdba74); }
+    .photo-bg-2 { background: linear-gradient(135deg, #c4b5fd, #a78bfa); }
+    .photo-bg-3 { background: linear-gradient(135deg, #6ee7b7, #34d399); }
+    .photo-bg-4 { background: linear-gradient(135deg, #fda4af, #fb7185); }
+    .journal-photo .photo-caption {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 20px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.7));
+      color: #fff;
+      font-size: 24px;
+    }
+
+    /* Screen 4: Location */
+    .screen-location { background: #0c0a09; }
+    .location-map {
+      width: 100%;
+      height: 600px;
+      background: linear-gradient(135deg, #1a2e35, #0f1f26);
+      border-radius: 24px;
+      margin: 20px 0 32px;
+      position: relative;
+      overflow: hidden;
+    }
+    .map-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(99,102,241,0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99,102,241,0.08) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+    .map-pin {
+      position: absolute;
+      width: 64px;
+      height: 64px;
+      background: #6366f1;
+      border-radius: 50% 50% 50% 4px;
+      transform: rotate(-45deg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(99,102,241,0.4);
+    }
+    .map-pin::after {
+      content: '';
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      border-radius: 50%;
+    }
+    .map-pin.pin-1 { top: 180px; left: 300px; }
+    .map-pin.pin-2 { top: 300px; left: 580px; background: #ec4899; box-shadow: 0 4px 12px rgba(236,72,153,0.4); }
+    .map-pin.pin-3 { top: 120px; left: 650px; background: #10b981; box-shadow: 0 4px 12px rgba(16,185,129,0.4); }
+    .map-pulse {
+      position: absolute;
+      top: 350px;
+      left: 420px;
+      width: 40px;
+      height: 40px;
+      background: #0ea5e9;
+      border-radius: 50%;
+      box-shadow: 0 0 0 20px rgba(14,165,233,0.2), 0 0 0 40px rgba(14,165,233,0.1);
+    }
+
+    .location-card {
+      background: #1c1917;
+      border-radius: 24px;
+      padding: 36px;
+      margin-bottom: 20px;
+      border: 1px solid #292524;
+      display: flex;
+      gap: 24px;
+      align-items: center;
+    }
+    .location-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      flex-shrink: 0;
+    }
+    .loc-home { background: rgba(99,102,241,0.15); }
+    .loc-work { background: rgba(16,185,129,0.15); }
+    .loc-gym { background: rgba(236,72,153,0.15); }
+    .location-info h4 {
+      font-size: 32px;
+      font-weight: 600;
+      color: #d6d3d1;
+      margin-bottom: 6px;
+    }
+    .location-info p {
+      font-size: 26px;
+      color: #78716c;
+    }
+    .location-info .reminder-count {
+      font-size: 24px;
+      color: #6366f1;
+      margin-top: 4px;
+    }
+
+    /* Screen 5: AI Insights */
+    .screen-insights { background: #0c0a09; }
+    .insights-header {
+      margin: 20px 0 32px;
+    }
+    .insights-header h3 {
+      font-size: 48px;
+      font-weight: 700;
+      color: #fafafa;
+      margin-bottom: 8px;
+    }
+    .insights-header p {
+      font-size: 28px;
+      color: #78716c;
+    }
+    .stats-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      flex: 1;
+      background: #1c1917;
+      border-radius: 24px;
+      padding: 32px;
+      border: 1px solid #292524;
+      text-align: center;
+    }
+    .stat-card .stat-value {
+      font-size: 56px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .stat-card .stat-label {
+      font-size: 24px;
+      color: #78716c;
+    }
+    .stat-purple .stat-value { color: #8b5cf6; }
+    .stat-green .stat-value { color: #10b981; }
+    .stat-blue .stat-value { color: #0ea5e9; }
+
+    .insight-card {
+      background: #1c1917;
+      border-radius: 24px;
+      padding: 36px;
+      margin-bottom: 20px;
+      border: 1px solid #292524;
+    }
+    .insight-card .insight-icon {
+      font-size: 40px;
+      margin-bottom: 16px;
+    }
+    .insight-card h4 {
+      font-size: 30px;
+      font-weight: 600;
+      color: #d6d3d1;
+      margin-bottom: 12px;
+    }
+    .insight-card p {
+      font-size: 26px;
+      color: #78716c;
+      line-height: 1.5;
+    }
+
+    /* Screen 6: Voice Recording */
+    .screen-voice { background: #0c0a09; }
+    .voice-active-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(12,10,9,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 5;
+    }
+    .voice-wave {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 60px;
+    }
+    .voice-wave .bar {
+      width: 12px;
+      border-radius: 6px;
+      background: linear-gradient(180deg, #6366f1, #8b5cf6);
+    }
+    .voice-recording-text {
+      font-size: 40px;
+      font-weight: 600;
+      color: #fafafa;
+      margin-bottom: 16px;
+    }
+    .voice-transcript-live {
+      font-size: 32px;
+      color: #a8a29e;
+      text-align: center;
+      max-width: 700px;
+      line-height: 1.6;
+      margin-bottom: 60px;
+    }
+    .voice-stop-btn {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 0 20px rgba(239,68,68,0.2), 0 0 0 40px rgba(239,68,68,0.08);
+    }
+    .voice-stop-btn .stop-icon {
+      width: 40px;
+      height: 40px;
+      background: #fff;
+      border-radius: 8px;
+    }
+
+    /* Tab bar mock */
+    .mock-tab-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 160px;
+      background: rgba(28,25,23,0.95);
+      border-top: 1px solid #292524;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 0 20px;
+      padding-bottom: 40px;
+    }
+    .tab-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .tab-item .tab-icon {
+      font-size: 36px;
+    }
+    .tab-item .tab-label {
+      font-size: 22px;
+      color: #78716c;
+    }
+    .tab-item.active .tab-label {
+      color: #6366f1;
+    }
+
+    /* Export button */
+    .export-info {
+      text-align: center;
+      margin-top: 40px;
+      padding: 32px;
+      background: #292524;
+      border-radius: 16px;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .export-info h3 {
+      font-size: 20px;
+      margin-bottom: 12px;
+      color: #d6d3d1;
+    }
+    .export-info p {
+      font-size: 14px;
+      color: #a8a29e;
+      line-height: 1.6;
+    }
+    .export-info ol {
+      text-align: left;
+      font-size: 14px;
+      color: #a8a29e;
+      line-height: 2;
+      padding-left: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Voice Notes — App Store Previews</h1>
+  <p class="instructions">
+    6 preview screens at <code>1290 × 2796px</code> (iPhone 6.7").
+    Replace the mock UIs below with real screenshots of your app for a polished result,
+    or use these directly as stylized marketing screenshots.
+  </p>
+
+  <div class="previews">
+
+    <!-- ===== PREVIEW 1: Voice Capture ===== -->
+    <div class="preview">
+      <div class="preview-canvas bg-primary">
+        <div class="marketing">
+          <h2>Capture Any Thought</h2>
+          <p>Just speak. Your voice becomes organized notes, tasks, and reminders.</p>
+        </div>
+        <div class="device-frame">
+          <div class="device-bezel">
+            <div class="screenshot-slot screen-home">
+              <img src="./capture thoughts.PNG" alt="capture thoughts preview" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="preview-number">1 / 6 — Voice Capture</div>
+    </div>
+
+    <!-- ===== PREVIEW 2: Smart Tasks ===== -->
+    <div class="preview">
+      <div class="preview-canvas bg-cool">
+        <div class="marketing">
+          <h2>Stay on Track</h2>
+          <p>AI organizes your voice notes into actionable tasks automatically.</p>
+        </div>
+        <div class="device-frame">
+          <div class="device-bezel">
+            <div class="screenshot-slot screen-tasks">
+              <img src="./Stay on track.PNG" alt="stay on track preview" />  
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="preview-number">2 / 6 — Smart Tasks</div>
+    </div>
+
+    <!-- ===== PREVIEW 3: Photo Journal ===== -->
+    <div class="preview">
+      <div class="preview-canvas bg-warm">
+        <div class="marketing">
+          <h2>Your Day, Captured</h2>
+          <p>Photo journal with AI-powered insights about your well-being.</p>
+        </div>
+        <div class="device-frame">
+          <div class="device-bezel">
+            <div class="screenshot-slot screen-journal">
+              <img src="./captureday.PNG" alt="capture day preview" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="preview-number">3 / 6 — Photo Journal</div>
+    </div>
+
+    <!-- ===== PREVIEW 4: Location Reminders ===== -->
+    <div class="preview">
+      <div class="preview-canvas bg-success">
+        <div class="marketing">
+          <h2>Right Place, Right Time</h2>
+          <p>Get reminded when you arrive at the location that matters.</p>
+        </div>
+        <div class="device-frame">
+          <div class="device-bezel">
+            <div class="screenshot-slot screen-location">
+              <div class="mock-status-bar">
+                <span>9:41</span>
+                <span style="display:flex;gap:8px;align-items:center;">
+                  <span style="font-size:24px;">●●●●</span>
+                  <span style="font-size:24px;">WiFi</span>
+                  <span style="font-size:24px;">🔋</span>
+                </span>
+              </div>
+              <div class="mock-screen">
+                <div class="location-map">
+                  <div class="map-grid"></div>
+                  <div class="map-pin pin-1"></div>
+                  <div class="map-pin pin-2"></div>
+                  <div class="map-pin pin-3"></div>
+                  <div class="map-pulse"></div>
+                </div>
+                <div class="location-card">
+                  <div class="location-icon loc-home">🏠</div>
+                  <div class="location-info">
+                    <h4>Home</h4>
+                    <p>Arrive home triggers</p>
+                    <div class="reminder-count">3 active reminders</div>
+                  </div>
+                </div>
+                <div class="location-card">
+                  <div class="location-icon loc-work">💼</div>
+                  <div class="location-info">
+                    <h4>Office</h4>
+                    <p>Weekday triggers</p>
+                    <div class="reminder-count">2 active reminders</div>
+                  </div>
+                </div>
+                <div class="location-card">
+                  <div class="location-icon loc-gym">🏋️</div>
+                  <div class="location-info">
+                    <h4>Whole Foods</h4>
+                    <p>Near store triggers</p>
+                    <div class="reminder-count">1 active reminder</div>
+                  </div>
+                </div>
+              </div>
+              <div class="mock-tab-bar">
+                <div class="tab-item"><span class="tab-icon">🏠</span><span class="tab-label">Home</span></div>
+                <div class="tab-item active"><span class="tab-icon">✓</span><span class="tab-label">Tasks</span></div>
+                <div class="tab-item"><span class="tab-icon">📸</span><span class="tab-label">Journal</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="preview-number">4 / 6 — Location Reminders</div>
+    </div>
+
+    <!-- ===== PREVIEW 5: AI Insights ===== -->
+    <div class="preview">
+      <div class="preview-canvas bg-rose">
+        <div class="marketing">
+          <h2>Know Yourself Better</h2>
+          <p>AI-powered insights into your productivity, habits, and well-being.</p>
+        </div>
+        <div class="device-frame">
+          <div class="device-bezel">
+            <div class="screenshot-slot screen-insights">
+              <div class="mock-status-bar">
+                <span>9:41</span>
+                <span style="display:flex;gap:8px;align-items:center;">
+                  <span style="font-size:24px;">●●●●</span>
+                  <span style="font-size:24px;">WiFi</span>
+                  <span style="font-size:24px;">🔋</span>
+                </span>
+              </div>
+              <div class="mock-screen">
+                <div class="insights-header">
+                  <h3>Your Insights</h3>
+                  <p>This week's summary</p>
+                </div>
+                <div class="stats-row">
+                  <div class="stat-card stat-purple">
+                    <div class="stat-value">12</div>
+                    <div class="stat-label">Day Streak</div>
+                  </div>
+                  <div class="stat-card stat-green">
+                    <div class="stat-value">87%</div>
+                    <div class="stat-label">Completion</div>
+                  </div>
+                  <div class="stat-card stat-blue">
+                    <div class="stat-value">24</div>
+                    <div class="stat-label">Tasks Done</div>
+                  </div>
+                </div>
+                <div class="insight-card">
+                  <div class="insight-icon">🔥</div>
+                  <h4>Productivity Peak</h4>
+                  <p>You're most productive between 9–11 AM. Try scheduling important tasks during this window.</p>
+                </div>
+                <div class="insight-card">
+                  <div class="insight-icon">🧘</div>
+                  <h4>Well-being Check</h4>
+                  <p>Your journal shows a positive trend this week. Keep up the great work with your morning routine!</p>
+                </div>
+                <div class="insight-card">
+                  <div class="insight-icon">💡</div>
+                  <h4>Smart Suggestion</h4>
+                  <p>You frequently shop at Whole Foods on Saturdays. Want to set a recurring reminder?</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="preview-number">5 / 6 — AI Insights</div>
+    </div>
+
+    <!-- ===== PREVIEW 6: Voice Recording Active ===== -->
+    <div class="preview">
+      <div class="preview-canvas bg-amber">
+        <div class="marketing">
+          <h2>Just Speak</h2>
+          <p>Real-time voice recognition with instant transcription.</p>
+        </div>
+        <div class="device-frame">
+          <div class="device-bezel">
+            <div class="screenshot-slot screen-voice">
+              <div class="mock-status-bar" style="z-index:10;position:relative;">
+                <span>9:41</span>
+                <span style="display:flex;gap:8px;align-items:center;">
+                  <span style="font-size:24px;">●●●●</span>
+                  <span style="font-size:24px;">WiFi</span>
+                  <span style="font-size:24px;">🔋</span>
+                </span>
+              </div>
+              <div class="voice-active-overlay">
+                <div class="voice-wave">
+                  <div class="bar" style="height:40px;"></div>
+                  <div class="bar" style="height:80px;"></div>
+                  <div class="bar" style="height:120px;"></div>
+                  <div class="bar" style="height:160px;"></div>
+                  <div class="bar" style="height:200px;"></div>
+                  <div class="bar" style="height:140px;"></div>
+                  <div class="bar" style="height:180px;"></div>
+                  <div class="bar" style="height:220px;"></div>
+                  <div class="bar" style="height:160px;"></div>
+                  <div class="bar" style="height:100px;"></div>
+                  <div class="bar" style="height:140px;"></div>
+                  <div class="bar" style="height:200px;"></div>
+                  <div class="bar" style="height:120px;"></div>
+                  <div class="bar" style="height:60px;"></div>
+                  <div class="bar" style="height:100px;"></div>
+                  <div class="bar" style="height:160px;"></div>
+                  <div class="bar" style="height:80px;"></div>
+                  <div class="bar" style="height:40px;"></div>
+                </div>
+                <div class="voice-recording-text">Listening...</div>
+                <div class="voice-transcript-live">
+                  "Remind me to pick up the dry cleaning when I'm near the mall tomorrow afternoon..."
+                </div>
+                <div class="voice-stop-btn">
+                  <div class="stop-icon"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="preview-number">6 / 6 — Voice Recording</div>
+    </div>
+
+  </div>
+
+  <div class="export-info">
+    <h3>How to Export These Previews</h3>
+    <ol>
+      <li>Open this file in <strong>Chrome</strong> or <strong>Safari</strong></li>
+      <li>Right-click a preview → <strong>Inspect Element</strong> on the <code>.preview-canvas</code> div</li>
+      <li>In DevTools, right-click the element → <strong>"Capture node screenshot"</strong> (Chrome) or use the screenshot button</li>
+      <li>This exports at the full <strong>1290 × 2796px</strong> resolution needed for App Store</li>
+      <li>Alternatively, use <code>html2canvas</code> or <code>Puppeteer</code> for automated export — see the included <code>export.js</code> script</li>
+    </ol>
+    <p style="margin-top:16px;">
+      <strong>Pro tip:</strong> Replace the mock UIs with real screenshots of your app for best results.
+      Drop your screenshot as an <code>&lt;img&gt;</code> inside the <code>.screenshot-slot</code> div.
+    </p>
+  </div>
+
+</body>
+</html>

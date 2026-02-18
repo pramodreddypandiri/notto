@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Export App Store Preview</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #111;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+    }
+
+    /* Controls bar */
+    .controls {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      background: #222;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 1px solid #444;
+      flex-wrap: wrap;
+    }
+    .controls label {
+      color: #ccc;
+      font-size: 14px;
+    }
+    .controls select, .controls button {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid #555;
+      background: #333;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .controls button {
+      background: #6366f1;
+      border-color: #6366f1;
+      font-weight: 600;
+    }
+    .controls button:hover { background: #4f46e5; }
+    .controls .hint {
+      color: #888;
+      font-size: 12px;
+      margin-left: auto;
+    }
+
+    /* The export canvas — exactly 1290x2796, NO scaling */
+    #export-canvas {
+      width: 1290px;
+      height: 2796px;
+      margin: 80px auto 40px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    /* Background Gradients */
+    .bg-primary { background: linear-gradient(170deg, #312e81 0%, #1c1917 40%, #0c0a09 100%); }
+    .bg-cool    { background: linear-gradient(170deg, #0369a1 0%, #1c1917 40%, #0c0a09 100%); }
+    .bg-warm    { background: linear-gradient(170deg, #6d28d9 0%, #1c1917 40%, #0c0a09 100%); }
+    .bg-success { background: linear-gradient(170deg, #047857 0%, #1c1917 40%, #0c0a09 100%); }
+    .bg-rose    { background: linear-gradient(170deg, #be185d 0%, #1c1917 40%, #0c0a09 100%); }
+    .bg-amber   { background: linear-gradient(170deg, #b45309 0%, #1c1917 40%, #0c0a09 100%); }
+
+    /* Marketing text */
+    .marketing {
+      padding: 140px 80px 60px;
+      text-align: center;
+      z-index: 2;
+    }
+    .marketing h2 {
+      font-size: 96px;
+      font-weight: 800;
+      letter-spacing: -2px;
+      line-height: 1.1;
+      color: #ffffff;
+      margin-bottom: 28px;
+    }
+    .marketing p {
+      font-size: 48px;
+      font-weight: 400;
+      color: rgba(255,255,255,0.7);
+      line-height: 1.4;
+    }
+
+    /* Device frame */
+    .device-frame {
+      position: relative;
+      width: 1000px;
+      margin: 40px auto 0;
+      flex: 1;
+      display: flex;
+      justify-content: center;
+    }
+    .device-bezel {
+      width: 920px;
+      height: 1880px;
+      background: #1c1917;
+      border-radius: 72px;
+      border: 6px solid #44403c;
+      overflow: hidden;
+      position: relative;
+      box-shadow:
+        0 0 0 2px #292524,
+        0 40px 80px rgba(0,0,0,0.5),
+        inset 0 0 0 2px #292524;
+    }
+    .device-bezel::before {
+      content: '';
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 240px;
+      height: 68px;
+      background: #0c0a09;
+      border-radius: 40px;
+      z-index: 10;
+    }
+
+    .screenshot-slot {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+    .screenshot-slot > img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+      display: block;
+    }
+
+    /* Mock screens for previews without real screenshots */
+    .mock-content {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+    .mock-content .mock-status-bar {
+      width: 100%;
+      height: 110px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 0 48px 16px;
+      font-size: 32px;
+      font-weight: 600;
+      color: #fafafa;
+      background: #0c0a09;
+    }
+    .mock-content .mock-screen {
+      flex: 1;
+      width: 100%;
+      padding: 0 36px;
+      overflow: hidden;
+      background: #0c0a09;
+    }
+
+    /* Location screen mock */
+    .location-map {
+      width: 100%;
+      height: 600px;
+      background: linear-gradient(135deg, #1a2e35, #0f1f26);
+      border-radius: 24px;
+      margin: 20px 0 32px;
+      position: relative;
+      overflow: hidden;
+    }
+    .map-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(99,102,241,0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99,102,241,0.08) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+    .map-pin {
+      position: absolute;
+      width: 64px;
+      height: 64px;
+      background: #6366f1;
+      border-radius: 50% 50% 50% 4px;
+      transform: rotate(-45deg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(99,102,241,0.4);
+    }
+    .map-pin::after { content: ''; width: 20px; height: 20px; background: #fff; border-radius: 50%; }
+    .map-pin.pin-1 { top: 180px; left: 300px; }
+    .map-pin.pin-2 { top: 300px; left: 580px; background: #ec4899; box-shadow: 0 4px 12px rgba(236,72,153,0.4); }
+    .map-pin.pin-3 { top: 120px; left: 650px; background: #10b981; box-shadow: 0 4px 12px rgba(16,185,129,0.4); }
+    .map-pulse {
+      position: absolute; top: 350px; left: 420px;
+      width: 40px; height: 40px; background: #0ea5e9; border-radius: 50%;
+      box-shadow: 0 0 0 20px rgba(14,165,233,0.2), 0 0 0 40px rgba(14,165,233,0.1);
+    }
+    .location-card {
+      background: #1c1917; border-radius: 24px; padding: 36px;
+      margin-bottom: 20px; border: 1px solid #292524;
+      display: flex; gap: 24px; align-items: center;
+    }
+    .location-icon {
+      width: 72px; height: 72px; border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px; flex-shrink: 0;
+    }
+    .loc-home { background: rgba(99,102,241,0.15); }
+    .loc-work { background: rgba(16,185,129,0.15); }
+    .loc-gym { background: rgba(236,72,153,0.15); }
+    .location-info h4 { font-size: 32px; font-weight: 600; color: #d6d3d1; margin-bottom: 6px; }
+    .location-info p { font-size: 26px; color: #78716c; }
+    .location-info .reminder-count { font-size: 24px; color: #6366f1; margin-top: 4px; }
+
+    /* Insights mock */
+    .insights-header { margin: 20px 0 32px; }
+    .insights-header h3 { font-size: 48px; font-weight: 700; color: #fafafa; margin-bottom: 8px; }
+    .insights-header p { font-size: 28px; color: #78716c; }
+    .stats-row { display: flex; gap: 16px; margin-bottom: 28px; }
+    .stat-card { flex: 1; background: #1c1917; border-radius: 24px; padding: 32px; border: 1px solid #292524; text-align: center; }
+    .stat-card .stat-value { font-size: 56px; font-weight: 800; margin-bottom: 8px; }
+    .stat-card .stat-label { font-size: 24px; color: #78716c; }
+    .stat-purple .stat-value { color: #8b5cf6; }
+    .stat-green .stat-value { color: #10b981; }
+    .stat-blue .stat-value { color: #0ea5e9; }
+    .insight-card { background: #1c1917; border-radius: 24px; padding: 36px; margin-bottom: 20px; border: 1px solid #292524; }
+    .insight-card .insight-icon { font-size: 40px; margin-bottom: 16px; }
+    .insight-card h4 { font-size: 30px; font-weight: 600; color: #d6d3d1; margin-bottom: 12px; }
+    .insight-card p { font-size: 26px; color: #78716c; line-height: 1.5; }
+
+    /* Voice recording mock */
+    .voice-active-overlay {
+      position: absolute; inset: 0;
+      background: rgba(12,10,9,0.92);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; z-index: 5;
+    }
+    .voice-wave { display: flex; align-items: center; gap: 8px; margin-bottom: 60px; }
+    .voice-wave .bar { width: 12px; border-radius: 6px; background: linear-gradient(180deg, #6366f1, #8b5cf6); }
+    .voice-recording-text { font-size: 40px; font-weight: 600; color: #fafafa; margin-bottom: 16px; }
+    .voice-transcript-live { font-size: 32px; color: #a8a29e; text-align: center; max-width: 700px; line-height: 1.6; margin-bottom: 60px; }
+    .voice-stop-btn {
+      width: 120px; height: 120px; border-radius: 50%;
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 0 20px rgba(239,68,68,0.2), 0 0 0 40px rgba(239,68,68,0.08);
+    }
+    .voice-stop-btn .stop-icon { width: 40px; height: 40px; background: #fff; border-radius: 8px; }
+
+    .mock-tab-bar {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 160px; background: rgba(28,25,23,0.95);
+      border-top: 1px solid #292524;
+      display: flex; justify-content: space-around; align-items: center;
+      padding: 0 20px; padding-bottom: 40px;
+    }
+    .tab-item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .tab-item .tab-icon { font-size: 36px; }
+    .tab-item .tab-label { font-size: 22px; color: #78716c; }
+    .tab-item.active .tab-label { color: #6366f1; }
+  </style>
+</head>
+<body>
+
+  <div class="controls">
+    <label>Select preview:</label>
+    <select id="screen-select">
+      <option value="1">1 — Capture Any Thought</option>
+      <option value="2">2 — Stay on Track</option>
+      <option value="3">3 — Your Day, Captured</option>
+      <option value="4">4 — Right Place, Right Time</option>
+      <option value="5">5 — Know Yourself Better</option>
+      <option value="6">6 — Just Speak</option>
+    </select>
+    <button onclick="downloadScreenshot()">Download as PNG (1290×2796)</button>
+    <span class="hint">Each export is exactly 1290×2796px — ready for App Store upload</span>
+  </div>
+
+  <div id="export-canvas" class="bg-primary">
+    <!-- Content injected by JS -->
+  </div>
+
+  <script>
+    const screens = {
+      1: {
+        bg: 'bg-primary',
+        title: 'Capture Any\nThought',
+        subtitle: 'Just speak. Your voice becomes organized notes, tasks, and reminders.',
+        image: './capture thoughts.PNG',
+        filename: 'preview-1-capture-thoughts.png'
+      },
+      2: {
+        bg: 'bg-cool',
+        title: 'Stay on\nTrack',
+        subtitle: 'AI organizes your voice notes into actionable tasks automatically.',
+        image: './Stay on track.PNG',
+        filename: 'preview-2-stay-on-track.png'
+      },
+      3: {
+        bg: 'bg-warm',
+        title: 'Your Day,\nCaptured',
+        subtitle: 'Photo journal with AI-powered insights about your well-being.',
+        image: './captureday.PNG',
+        filename: 'preview-3-photo-journal.png'
+      },
+      4: {
+        bg: 'bg-success',
+        title: 'Right Place,\nRight Time',
+        subtitle: 'Get reminded when you arrive at the location that matters.',
+        image: null,
+        mock: 'location',
+        filename: 'preview-4-location-reminders.png'
+      },
+      5: {
+        bg: 'bg-rose',
+        title: 'Know Yourself\nBetter',
+        subtitle: 'AI-powered insights into your productivity, habits, and well-being.',
+        image: null,
+        mock: 'insights',
+        filename: 'preview-5-ai-insights.png'
+      },
+      6: {
+        bg: 'bg-amber',
+        title: 'Just\nSpeak',
+        subtitle: 'Real-time voice recognition with instant transcription.',
+        image: null,
+        mock: 'voice',
+        filename: 'preview-6-voice-recording.png'
+      }
+    };
+
+    const mockLocation = `
+      <div class="mock-content">
+        <div class="mock-status-bar">
+          <span>9:41</span>
+          <span style="font-size:24px;">●●●● &nbsp; 🔋</span>
+        </div>
+        <div class="mock-screen">
+          <div class="location-map">
+            <div class="map-grid"></div>
+            <div class="map-pin pin-1"></div>
+            <div class="map-pin pin-2"></div>
+            <div class="map-pin pin-3"></div>
+            <div class="map-pulse"></div>
+          </div>
+          <div class="location-card">
+            <div class="location-icon loc-home">🏠</div>
+            <div class="location-info">
+              <h4>Home</h4>
+              <p>Arrive home triggers</p>
+              <div class="reminder-count">3 active reminders</div>
+            </div>
+          </div>
+          <div class="location-card">
+            <div class="location-icon loc-work">💼</div>
+            <div class="location-info">
+              <h4>Office</h4>
+              <p>Weekday triggers</p>
+              <div class="reminder-count">2 active reminders</div>
+            </div>
+          </div>
+          <div class="location-card">
+            <div class="location-icon loc-gym">🏋️</div>
+            <div class="location-info">
+              <h4>Whole Foods</h4>
+              <p>Near store triggers</p>
+              <div class="reminder-count">1 active reminder</div>
+            </div>
+          </div>
+        </div>
+        <div class="mock-tab-bar">
+          <div class="tab-item"><span class="tab-icon">🏠</span><span class="tab-label">Home</span></div>
+          <div class="tab-item active"><span class="tab-icon">✓</span><span class="tab-label">Tasks</span></div>
+          <div class="tab-item"><span class="tab-icon">📸</span><span class="tab-label">Journal</span></div>
+        </div>
+      </div>`;
+
+    const mockInsights = `
+      <div class="mock-content">
+        <div class="mock-status-bar">
+          <span>9:41</span>
+          <span style="font-size:24px;">●●●● &nbsp; 🔋</span>
+        </div>
+        <div class="mock-screen">
+          <div class="insights-header">
+            <h3>Your Insights</h3>
+            <p>This week's summary</p>
+          </div>
+          <div class="stats-row">
+            <div class="stat-card stat-purple"><div class="stat-value">12</div><div class="stat-label">Day Streak</div></div>
+            <div class="stat-card stat-green"><div class="stat-value">87%</div><div class="stat-label">Completion</div></div>
+            <div class="stat-card stat-blue"><div class="stat-value">24</div><div class="stat-label">Tasks Done</div></div>
+          </div>
+          <div class="insight-card"><div class="insight-icon">🔥</div><h4>Productivity Peak</h4><p>You're most productive between 9–11 AM. Try scheduling important tasks during this window.</p></div>
+          <div class="insight-card"><div class="insight-icon">🧘</div><h4>Well-being Check</h4><p>Your journal shows a positive trend this week. Keep up the great work with your morning routine!</p></div>
+          <div class="insight-card"><div class="insight-icon">💡</div><h4>Smart Suggestion</h4><p>You frequently shop at Whole Foods on Saturdays. Want to set a recurring reminder?</p></div>
+        </div>
+      </div>`;
+
+    const mockVoice = `
+      <div class="mock-content" style="background:#0c0a09;">
+        <div class="mock-status-bar" style="z-index:10;position:relative;">
+          <span>9:41</span>
+          <span style="font-size:24px;">●●●● &nbsp; 🔋</span>
+        </div>
+        <div class="voice-active-overlay">
+          <div class="voice-wave">
+            <div class="bar" style="height:40px;"></div>
+            <div class="bar" style="height:80px;"></div>
+            <div class="bar" style="height:120px;"></div>
+            <div class="bar" style="height:160px;"></div>
+            <div class="bar" style="height:200px;"></div>
+            <div class="bar" style="height:140px;"></div>
+            <div class="bar" style="height:180px;"></div>
+            <div class="bar" style="height:220px;"></div>
+            <div class="bar" style="height:160px;"></div>
+            <div class="bar" style="height:100px;"></div>
+            <div class="bar" style="height:140px;"></div>
+            <div class="bar" style="height:200px;"></div>
+            <div class="bar" style="height:120px;"></div>
+            <div class="bar" style="height:60px;"></div>
+            <div class="bar" style="height:100px;"></div>
+            <div class="bar" style="height:160px;"></div>
+            <div class="bar" style="height:80px;"></div>
+            <div class="bar" style="height:40px;"></div>
+          </div>
+          <div class="voice-recording-text">Listening...</div>
+          <div class="voice-transcript-live">"Remind me to pick up the dry cleaning when I'm near the mall tomorrow afternoon..."</div>
+          <div class="voice-stop-btn"><div class="stop-icon"></div></div>
+        </div>
+      </div>`;
+
+    const mocks = { location: mockLocation, insights: mockInsights, voice: mockVoice };
+
+    function renderScreen(num) {
+      const s = screens[num];
+      const canvas = document.getElementById('export-canvas');
+
+      // Set background
+      canvas.className = s.bg;
+
+      // Build the title with line breaks
+      const titleHTML = s.title.split('\n').join('<br>');
+
+      // Build screenshot content
+      let slotContent = '';
+      if (s.image) {
+        slotContent = `<img src="${s.image}" alt="screenshot" />`;
+      } else if (s.mock) {
+        slotContent = mocks[s.mock];
+      }
+
+      canvas.innerHTML = `
+        <div class="marketing">
+          <h2>${titleHTML}</h2>
+          <p>${s.subtitle}</p>
+        </div>
+        <div class="device-frame">
+          <div class="device-bezel">
+            <div class="screenshot-slot">
+              ${slotContent}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Gradient color stops matching CSS classes
+    const gradients = {
+      'bg-primary': [['#312e81', 0], ['#1c1917', 0.4], ['#0c0a09', 1]],
+      'bg-cool':    [['#0369a1', 0], ['#1c1917', 0.4], ['#0c0a09', 1]],
+      'bg-warm':    [['#6d28d9', 0], ['#1c1917', 0.4], ['#0c0a09', 1]],
+      'bg-success': [['#047857', 0], ['#1c1917', 0.4], ['#0c0a09', 1]],
+      'bg-rose':    [['#be185d', 0], ['#1c1917', 0.4], ['#0c0a09', 1]],
+      'bg-amber':   [['#b45309', 0], ['#1c1917', 0.4], ['#0c0a09', 1]],
+    };
+
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+
+    async function downloadScreenshot() {
+      const num = document.getElementById('screen-select').value;
+      const s = screens[num];
+
+      const W = 1290, H = 2796;
+      const c = document.createElement('canvas');
+      c.width = W;
+      c.height = H;
+      const ctx = c.getContext('2d');
+
+      // 1) Draw gradient background (170deg ≈ nearly vertical, top-to-bottom)
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      for (const [color, stop] of gradients[s.bg]) {
+        grad.addColorStop(stop, color);
+      }
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      // 2) Draw marketing text
+      ctx.textAlign = 'center';
+
+      // Title
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 96px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif';
+      const titleLines = s.title.split('\n');
+      let titleY = 240;
+      for (const line of titleLines) {
+        ctx.fillText(line, W / 2, titleY);
+        titleY += 110;
+      }
+
+      // Subtitle
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.font = '400 46px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif';
+      const subtitleLines = wrapText(ctx, s.subtitle, W - 160);
+      let subY = titleY + 30;
+      for (const line of subtitleLines) {
+        ctx.fillText(line, W / 2, subY);
+        subY += 66;
+      }
+
+      // 3) Draw device bezel
+      const bezelW = 920, bezelH = 1880;
+      const bezelX = (W - bezelW) / 2;
+      const bezelY = subY + 60;
+      const bezelR = 72;
+
+      // Outer shadow
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 80;
+      ctx.shadowOffsetY = 40;
+
+      // Bezel border
+      ctx.fillStyle = '#44403c';
+      roundRect(ctx, bezelX - 8, bezelY - 8, bezelW + 16, bezelH + 16, bezelR + 4);
+      ctx.fill();
+
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+
+      // Bezel inner background
+      ctx.fillStyle = '#1c1917';
+      roundRect(ctx, bezelX, bezelY, bezelW, bezelH, bezelR);
+      ctx.fill();
+
+      // 4) Draw screenshot image inside bezel (clipped)
+      if (s.image) {
+        try {
+          const img = await loadImage(s.image);
+          ctx.save();
+          roundRect(ctx, bezelX, bezelY, bezelW, bezelH, bezelR);
+          ctx.clip();
+
+          // Cover fit (top-aligned)
+          const imgAspect = img.width / img.height;
+          const bezelAspect = bezelW / bezelH;
+          let drawW, drawH, drawX, drawY;
+          if (imgAspect > bezelAspect) {
+            drawH = bezelH;
+            drawW = bezelH * imgAspect;
+            drawX = bezelX - (drawW - bezelW) / 2;
+            drawY = bezelY;
+          } else {
+            drawW = bezelW;
+            drawH = bezelW / imgAspect;
+            drawX = bezelX;
+            drawY = bezelY; // top-aligned
+          }
+          ctx.drawImage(img, drawX, drawY, drawW, drawH);
+          ctx.restore();
+        } catch (e) {
+          console.error('Image load failed:', e);
+          // Draw placeholder
+          ctx.fillStyle = '#0c0a09';
+          roundRect(ctx, bezelX, bezelY, bezelW, bezelH, bezelR);
+          ctx.fill();
+          ctx.fillStyle = '#78716c';
+          ctx.font = '400 36px sans-serif';
+          ctx.fillText('Screenshot not found', W / 2, bezelY + bezelH / 2);
+        }
+      } else {
+        // For mock screens, capture the DOM element via a temporary approach:
+        // Draw a dark background and text overlay for mocks
+        ctx.save();
+        roundRect(ctx, bezelX, bezelY, bezelW, bezelH, bezelR);
+        ctx.clip();
+        ctx.fillStyle = '#0c0a09';
+        ctx.fillRect(bezelX, bezelY, bezelW, bezelH);
+
+        if (s.mock === 'voice') {
+          drawVoiceMock(ctx, bezelX, bezelY, bezelW, bezelH);
+        } else if (s.mock === 'insights') {
+          drawInsightsMock(ctx, bezelX, bezelY, bezelW, bezelH);
+        } else if (s.mock === 'location') {
+          drawLocationMock(ctx, bezelX, bezelY, bezelW, bezelH);
+        }
+        ctx.restore();
+      }
+
+      // 5) Draw Dynamic Island on top
+      ctx.fillStyle = '#0c0a09';
+      const diW = 240, diH = 68, diR = 40;
+      const diX = W / 2 - diW / 2;
+      const diY = bezelY + 20;
+      roundRect(ctx, diX, diY, diW, diH, diR);
+      ctx.fill();
+
+      // 6) Export
+      c.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.download = s.filename;
+        a.href = url;
+        a.click();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    }
+
+    // Helper: word-wrap text
+    function wrapText(ctx, text, maxWidth) {
+      const words = text.split(' ');
+      const lines = [];
+      let currentLine = words[0];
+      for (let i = 1; i < words.length; i++) {
+        const test = currentLine + ' ' + words[i];
+        if (ctx.measureText(test).width <= maxWidth) {
+          currentLine = test;
+        } else {
+          lines.push(currentLine);
+          currentLine = words[i];
+        }
+      }
+      lines.push(currentLine);
+      return lines;
+    }
+
+    // Helper: rounded rectangle path
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    // Mock: Voice recording screen
+    function drawVoiceMock(ctx, bx, by, bw, bh) {
+      ctx.fillStyle = 'rgba(12,10,9,0.92)';
+      ctx.fillRect(bx, by, bw, bh);
+
+      const cx = bx + bw / 2;
+      const cy = by + bh / 2 - 100;
+
+      // Wave bars
+      const barHeights = [40,80,120,160,200,140,180,220,160,100,140,200,120,60,100,160,80,40];
+      const barW = 12, barGap = 8;
+      const totalW = barHeights.length * (barW + barGap) - barGap;
+      let barX = cx - totalW / 2;
+      for (const h of barHeights) {
+        const grd = ctx.createLinearGradient(0, cy - h/2, 0, cy + h/2);
+        grd.addColorStop(0, '#6366f1');
+        grd.addColorStop(1, '#8b5cf6');
+        ctx.fillStyle = grd;
+        roundRect(ctx, barX, cy - h/2, barW, h, 6);
+        ctx.fill();
+        barX += barW + barGap;
+      }
+
+      // "Listening..." text
+      ctx.fillStyle = '#fafafa';
+      ctx.font = '600 40px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Listening...', cx, cy + 170);
+
+      // Transcript
+      ctx.fillStyle = '#a8a29e';
+      ctx.font = '400 30px -apple-system, sans-serif';
+      const transcript = '"Remind me to pick up the dry cleaning when I\'m near the mall tomorrow afternoon..."';
+      const tLines = wrapText(ctx, transcript, bw - 180);
+      let ty = cy + 230;
+      for (const l of tLines) { ctx.fillText(l, cx, ty); ty += 44; }
+
+      // Stop button
+      const btnY = ty + 60;
+      // Outer glow
+      ctx.fillStyle = 'rgba(239,68,68,0.08)';
+      ctx.beginPath(); ctx.arc(cx, btnY, 100, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(239,68,68,0.2)';
+      ctx.beginPath(); ctx.arc(cx, btnY, 80, 0, Math.PI * 2); ctx.fill();
+      // Button
+      const btnGrd = ctx.createLinearGradient(cx - 60, btnY - 60, cx + 60, btnY + 60);
+      btnGrd.addColorStop(0, '#ef4444');
+      btnGrd.addColorStop(1, '#dc2626');
+      ctx.fillStyle = btnGrd;
+      ctx.beginPath(); ctx.arc(cx, btnY, 60, 0, Math.PI * 2); ctx.fill();
+      // Stop icon
+      ctx.fillStyle = '#fff';
+      roundRect(ctx, cx - 20, btnY - 20, 40, 40, 8);
+      ctx.fill();
+    }
+
+    // Mock: Insights screen
+    function drawInsightsMock(ctx, bx, by, bw, bh) {
+      const px = bx + 36;
+      let y = by + 130;
+
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#fafafa';
+      ctx.font = '700 48px -apple-system, sans-serif';
+      ctx.fillText('Your Insights', px, y); y += 40;
+      ctx.fillStyle = '#78716c';
+      ctx.font = '400 28px -apple-system, sans-serif';
+      ctx.fillText("This week's summary", px, y); y += 60;
+
+      // Stats cards
+      const cardW = (bw - 36 * 2 - 32) / 3;
+      const statsData = [
+        { value: '12', label: 'Day Streak', color: '#8b5cf6' },
+        { value: '87%', label: 'Completion', color: '#10b981' },
+        { value: '24', label: 'Tasks Done', color: '#0ea5e9' },
+      ];
+      for (let i = 0; i < 3; i++) {
+        const cx = px + i * (cardW + 16);
+        ctx.fillStyle = '#1c1917';
+        roundRect(ctx, cx, y, cardW, 140, 24);
+        ctx.fill();
+        ctx.strokeStyle = '#292524';
+        ctx.lineWidth = 1;
+        roundRect(ctx, cx, y, cardW, 140, 24);
+        ctx.stroke();
+        ctx.textAlign = 'center';
+        ctx.fillStyle = statsData[i].color;
+        ctx.font = '800 52px -apple-system, sans-serif';
+        ctx.fillText(statsData[i].value, cx + cardW / 2, y + 70);
+        ctx.fillStyle = '#78716c';
+        ctx.font = '400 24px -apple-system, sans-serif';
+        ctx.fillText(statsData[i].label, cx + cardW / 2, y + 110);
+      }
+      y += 180;
+
+      // Insight cards
+      ctx.textAlign = 'left';
+      const insights = [
+        { icon: '🔥', title: 'Productivity Peak', desc: "You're most productive between 9–11 AM. Try scheduling important tasks during this window." },
+        { icon: '🧘', title: 'Well-being Check', desc: 'Your journal shows a positive trend this week. Keep up the great work with your morning routine!' },
+        { icon: '💡', title: 'Smart Suggestion', desc: 'You frequently shop at Whole Foods on Saturdays. Want to set a recurring reminder?' },
+      ];
+      for (const ins of insights) {
+        ctx.fillStyle = '#1c1917';
+        roundRect(ctx, px, y, bw - 72, 220, 24);
+        ctx.fill();
+        ctx.strokeStyle = '#292524'; ctx.lineWidth = 1;
+        roundRect(ctx, px, y, bw - 72, 220, 24); ctx.stroke();
+
+        ctx.font = '40px sans-serif';
+        ctx.fillText(ins.icon, px + 36, y + 56);
+        ctx.fillStyle = '#d6d3d1';
+        ctx.font = '600 30px -apple-system, sans-serif';
+        ctx.fillText(ins.title, px + 36, y + 100);
+        ctx.fillStyle = '#78716c';
+        ctx.font = '400 26px -apple-system, sans-serif';
+        const dLines = wrapText(ctx, ins.desc, bw - 144);
+        let dy = y + 140;
+        for (const l of dLines) { ctx.fillText(l, px + 36, dy); dy += 36; }
+        y += 240;
+      }
+    }
+
+    // Mock: Location screen
+    function drawLocationMock(ctx, bx, by, bw, bh) {
+      const px = bx + 36;
+      let y = by + 130;
+
+      // Map area
+      const mapH = 500;
+      ctx.fillStyle = '#0f1f26';
+      roundRect(ctx, px, y, bw - 72, mapH, 24);
+      ctx.fill();
+
+      // Map grid lines
+      ctx.strokeStyle = 'rgba(99,102,241,0.08)';
+      ctx.lineWidth = 1;
+      for (let gx = px; gx < px + bw - 72; gx += 60) {
+        ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx, y + mapH); ctx.stroke();
+      }
+      for (let gy = y; gy < y + mapH; gy += 60) {
+        ctx.beginPath(); ctx.moveTo(px, gy); ctx.lineTo(px + bw - 72, gy); ctx.stroke();
+      }
+
+      // Map pins
+      const pins = [
+        { x: px + 250, y: y + 160, color: '#6366f1' },
+        { x: px + 500, y: y + 280, color: '#ec4899' },
+        { x: px + 580, y: y + 100, color: '#10b981' },
+      ];
+      for (const p of pins) {
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 24, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // Pulse dot
+      ctx.fillStyle = 'rgba(14,165,233,0.1)';
+      ctx.beginPath(); ctx.arc(px + 380, y + 320, 40, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(14,165,233,0.2)';
+      ctx.beginPath(); ctx.arc(px + 380, y + 320, 24, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#0ea5e9';
+      ctx.beginPath(); ctx.arc(px + 380, y + 320, 12, 0, Math.PI * 2); ctx.fill();
+
+      y += mapH + 40;
+
+      // Location cards
+      ctx.textAlign = 'left';
+      const locations = [
+        { icon: '🏠', name: 'Home', desc: 'Arrive home triggers', count: '3 active reminders' },
+        { icon: '💼', name: 'Office', desc: 'Weekday triggers', count: '2 active reminders' },
+        { icon: '🏋️', name: 'Whole Foods', desc: 'Near store triggers', count: '1 active reminder' },
+      ];
+      for (const loc of locations) {
+        ctx.fillStyle = '#1c1917';
+        roundRect(ctx, px, y, bw - 72, 160, 24);
+        ctx.fill();
+        ctx.strokeStyle = '#292524'; ctx.lineWidth = 1;
+        roundRect(ctx, px, y, bw - 72, 160, 24); ctx.stroke();
+
+        ctx.font = '36px sans-serif';
+        ctx.fillText(loc.icon, px + 48, y + 90);
+
+        ctx.fillStyle = '#d6d3d1';
+        ctx.font = '600 32px -apple-system, sans-serif';
+        ctx.fillText(loc.name, px + 120, y + 60);
+        ctx.fillStyle = '#78716c';
+        ctx.font = '400 26px -apple-system, sans-serif';
+        ctx.fillText(loc.desc, px + 120, y + 100);
+        ctx.fillStyle = '#6366f1';
+        ctx.font = '400 24px -apple-system, sans-serif';
+        ctx.fillText(loc.count, px + 120, y + 136);
+
+        y += 180;
+      }
+    }
+
+    // Handle select change
+    document.getElementById('screen-select').addEventListener('change', (e) => {
+      renderScreen(parseInt(e.target.value));
+    });
+
+    // Render first screen on load
+    renderScreen(1);
+  </script>
+
+</body>
+</html>

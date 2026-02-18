@@ -218,6 +218,7 @@ export default function LocationsScreen() {
           <View style={styles.headerText}>
             <Text style={styles.title}>Location Reminders</Text>
             <Text style={styles.subtitle}>Get notified at the right place</Text>
+            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>This feature might be inconsistent</Text>
           </View>
         </View>
       </LinearGradient>

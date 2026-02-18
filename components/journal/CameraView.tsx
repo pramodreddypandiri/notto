@@ -20,7 +20,6 @@ import {
   Image,
   TextInput,
   TouchableOpacity,
-  Dimensions,
   Platform,
   StatusBar,
 } from 'react-native';
@@ -39,11 +38,8 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { CameraView as ExpoCameraView, CameraType, FlashMode, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import AnimatedPressable from '../ui/AnimatedPressable';
 import { colors, typography, spacing, borderRadius } from '../../theme';
 import { PhotoCategory, pickFromGallery } from '../../services/journalService';
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const CATEGORY_OPTIONS: { value: PhotoCategory; label: string; icon: string }[] = [
   { value: 'food', label: 'Food', icon: 'restaurant-outline' },
@@ -145,7 +141,7 @@ export function CameraView({ visible, onClose, onCapture }: CameraViewProps) {
     try {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
-        mirror: false, // Don't mirror front camera photos
+        mirror: facing === 'front',
         skipProcessing: Platform.OS === 'android',
       });
 
@@ -255,7 +251,7 @@ export function CameraView({ visible, onClose, onCapture }: CameraViewProps) {
               facing={facing}
               flash={flash}
               zoom={zoom}
-              mirror={false}
+              mirror={facing === 'front'}
             />
           </GestureDetector>
 
@@ -271,14 +267,9 @@ export function CameraView({ visible, onClose, onCapture }: CameraViewProps) {
               <Ionicons name="close" size={28} color={colors.neutral[0]} />
             </TouchableOpacity>
 
-            <View style={styles.topRightControls}>
-              <TouchableOpacity style={styles.controlButton} onPress={cycleFlash}>
-                <Ionicons name={getFlashIcon() as any} size={24} color={colors.neutral[0]} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.controlButton} onPress={toggleFacing}>
-                <Ionicons name="camera-reverse-outline" size={24} color={colors.neutral[0]} />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.controlButton} onPress={cycleFlash}>
+              <Ionicons name={getFlashIcon() as any} size={24} color={colors.neutral[0]} />
+            </TouchableOpacity>
           </View>
 
           {/* Bottom controls */}
@@ -295,8 +286,10 @@ export function CameraView({ visible, onClose, onCapture }: CameraViewProps) {
               </TouchableOpacity>
             </Animated.View>
 
-            {/* Placeholder for symmetry */}
-            <View style={styles.galleryButton} />
+            {/* Camera flip button */}
+            <TouchableOpacity style={styles.galleryButton} onPress={toggleFacing}>
+              <Ionicons name="camera-reverse-outline" size={28} color={colors.neutral[0]} />
+            </TouchableOpacity>
           </View>
 
           {/* Zoom indicator */}

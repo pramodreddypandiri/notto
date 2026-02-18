@@ -35,17 +35,17 @@ import { useTheme } from '../../context/ThemeContext';
 // Components
 import AnimatedPressable from '../../components/ui/AnimatedPressable';
 import PremiumButton from '../../components/ui/PremiumButton';
-import BottomSheet from '../../components/ui/BottomSheet';
 import { NotesListSkeleton } from '../../components/ui/SkeletonLoader';
 import NoteCard from '../../components/notes/NoteCard';
 import NoteInputBar from '../../components/notes/NoteInputBar';
 import TranscriptionReview from '../../components/notes/TranscriptionReview';
+import EditNoteModal from '../../components/notes/EditNoteModal';
 import TopBar from '../../components/common/TopBar';
 
 // Services
 import voiceService, { isGarbageTranscription, EMPTY_TRANSCRIPTION_PLACEHOLDER } from '../../services/voiceService';
 import speechRecognitionService, { useSpeechRecognitionEvent } from '../../services/speechRecognitionService';
-import { createNoteWithReminder, getNotes, updateNoteTags, deleteNote, NoteType } from '../../services/notesService';
+import { createNoteWithReminder, getNotes, updateNoteContent, deleteNote, NoteType } from '../../services/notesService';
 import soundService from '../../services/soundService';
 import notificationService from '../../services/notificationService';
 import reminderService from '../../services/reminderService';
@@ -114,6 +114,7 @@ interface Note {
   created_at: string;
   tags?: NoteTag[];
   reminder_time?: string;
+  note_type?: NoteType;
 }
 
 const DEMO_NOTES: Note[] = [
@@ -141,20 +142,6 @@ const DEMO_NOTES: Note[] = [
   },
 ];
 
-const TAG_OPTIONS: {
-  tag: NoteTag;
-  title: string;
-  description: string;
-  icon: string;
-}[] = [
-  {
-    tag: 'reminder',
-    title: 'Reminder',
-    description: 'Get notified at a specific time',
-    icon: 'alarm',
-  },
-];
-
 export default function HomeScreen() {
   const router = useRouter();
 
@@ -178,8 +165,8 @@ export default function HomeScreen() {
   const [useNativeSpeech, setUseNativeSpeech] = useState(false);
   const [realtimeTranscript, setRealtimeTranscript] = useState('');
 
-  // Tag modal state
-  const [showTagSheet, setShowTagSheet] = useState(false);
+  // Edit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
   // Filter state
@@ -576,50 +563,44 @@ export default function HomeScreen() {
 
   const handleTagPress = (noteId: string) => {
     setSelectedNoteId(noteId);
-    setShowTagSheet(true);
+    setShowEditModal(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const applyTag = async (tag: NoteTag) => {
-    if (!selectedNoteId) return;
-
-    const note = notes.find((n) => n.id === selectedNoteId);
+  const handleEditSave = async (noteId: string, transcript: string, noteType: NoteType) => {
+    const note = notes.find((n) => n.id === noteId);
     if (!note) return;
 
-    const currentTags = note.tags || [];
-    const hasTag = currentTags.includes(tag);
-    const newTags = hasTag
-      ? currentTags.filter((t) => t !== tag)
-      : [...currentTags, tag];
+    const oldTranscript = note.transcript;
+    const oldNoteType = note.note_type;
 
     // Update local state immediately for responsive UI
     setNotes(
       notes.map((n) => {
-        if (n.id === selectedNoteId) {
-          return { ...n, tags: newTags };
+        if (n.id === noteId) {
+          return { ...n, transcript, note_type: noteType };
         }
         return n;
       })
     );
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setShowTagSheet(false);
+    setShowEditModal(false);
     setSelectedNoteId(null);
 
-    // Save to database (don't block UI)
+    // Save to database
     if (!DEMO_MODE) {
-      const success = await updateNoteTags(selectedNoteId, newTags);
+      const success = await updateNoteContent(noteId, { transcript, note_type: noteType });
       if (!success) {
         // Revert on failure
         setNotes(
           notes.map((n) => {
-            if (n.id === selectedNoteId) {
-              return { ...n, tags: currentTags };
+            if (n.id === noteId) {
+              return { ...n, transcript: oldTranscript, note_type: oldNoteType };
             }
             return n;
           })
         );
-        Alert.alert('Error', 'Failed to update tag. Please try again.');
+        Alert.alert('Error', 'Failed to update note. Please try again.');
       }
     }
   };
@@ -826,103 +807,19 @@ export default function HomeScreen() {
       />
 
       {/* Tag Selection Bottom Sheet */}
-      <BottomSheet
-        visible={showTagSheet}
-        onClose={() => {
-          setShowTagSheet(false);
+      <EditNoteModal
+        visible={showEditModal}
+        noteId={selectedNoteId}
+        transcript={selectedNoteId ? notes.find((n) => n.id === selectedNoteId)?.transcript || '' : ''}
+        noteType={selectedNoteId ? (notes.find((n) => n.id === selectedNoteId)?.note_type || 'task') : 'task'}
+        onSave={handleEditSave}
+        onCancel={() => {
+          setShowEditModal(false);
           setSelectedNoteId(null);
         }}
-        height={55}
-      >
-        <Text style={[styles.sheetTitle, { color: themedColors.text.primary }]}>Tag Note</Text>
-        <Text style={[styles.sheetSubtitle, { color: themedColors.text.tertiary }]}>
-          Choose a tag to organize your note
-        </Text>
-
-        <View style={styles.tagOptions}>
-          {TAG_OPTIONS.map((option, index) => (
-            <TagOption
-              key={option.tag}
-              option={option}
-              index={index}
-              onPress={() => applyTag(option.tag)}
-              isSelected={
-                selectedNoteId
-                  ? notes
-                      .find((n) => n.id === selectedNoteId)
-                      ?.tags?.includes(option.tag) || false
-                  : false
-              }
-              themedColors={themedColors}
-            />
-          ))}
-        </View>
-      </BottomSheet>
+        themedColors={themedColors}
+      />
     </View>
-  );
-}
-
-// Tag Option Component
-function TagOption({
-  option,
-  index,
-  onPress,
-  isSelected,
-  themedColors,
-}: {
-  option: (typeof TAG_OPTIONS)[0];
-  index: number;
-  onPress: () => void;
-  isSelected: boolean;
-  themedColors?: ReturnType<typeof getThemedColors>;
-}) {
-  const tagColor = {
-    reminder: colors.accent.rose,
-    preference: colors.accent.emerald,
-    my_type: colors.accent.violet,
-    my_vibe: colors.accent.amber,
-  }[option.tag];
-
-  return (
-    <Animated.View
-      entering={FadeInDown.delay(index * 100).springify()}
-    >
-      <AnimatedPressable
-        onPress={onPress}
-        style={[
-          styles.tagOption,
-          {
-            backgroundColor: isSelected ? tagColor.light : (themedColors?.surface.secondary || colors.neutral[50]),
-            borderColor: isSelected ? tagColor.base : (themedColors?.surface.border || colors.neutral[200]),
-          },
-        ]}
-        hapticType="light"
-      >
-        <View
-          style={[
-            styles.tagOptionIcon,
-            { backgroundColor: tagColor.light },
-          ]}
-        >
-          <Ionicons
-            name={option.icon as any}
-            size={20}
-            color={tagColor.base}
-          />
-        </View>
-        <View style={styles.tagOptionText}>
-          <Text style={[styles.tagOptionTitle, { color: themedColors?.text.primary || colors.neutral[900] }]}>{option.title}</Text>
-          <Text style={[styles.tagOptionDesc, { color: themedColors?.text.tertiary || colors.neutral[500] }]}>{option.description}</Text>
-        </View>
-        {isSelected && (
-          <Ionicons
-            name="checkmark-circle"
-            size={24}
-            color={tagColor.base}
-          />
-        )}
-      </AnimatedPressable>
-    </Animated.View>
   );
 }
 
@@ -1115,47 +1012,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing[6],
     lineHeight: typography.fontSize.base * typography.lineHeight.relaxed,
-  },
-  sheetTitle: {
-    fontSize: typography.fontSize.xl,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral[900],
-    marginBottom: spacing[1],
-  },
-  sheetSubtitle: {
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral[500],
-    marginBottom: spacing[5],
-  },
-  tagOptions: {
-    gap: spacing[3],
-  },
-  tagOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing[4],
-    borderRadius: borderRadius.lg,
-    borderWidth: 1.5,
-    gap: spacing[3],
-  },
-  tagOptionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tagOptionText: {
-    flex: 1,
-  },
-  tagOptionTitle: {
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral[900],
-    marginBottom: 2,
-  },
-  tagOptionDesc: {
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral[500],
   },
 });
