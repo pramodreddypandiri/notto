@@ -503,6 +503,7 @@ Reminder Detection Guidelines:
 - Only use vague defaults when no specific time is given: "morning" = "09:00", "afternoon" = "14:00", "evening" = "18:00"
 - If multiple times are mentioned (e.g. "at 11 a.m. and 2 p.m."), use the FIRST time for recurrenceTime and put ALL times in additionalTimes array
 - Parse dates relative to today's date
+- IMPORTANT: Always use the LITERAL date the user mentions. If the user says "today", set eventDate to today (${localDateStr}). NEVER shift the date to tomorrow because the default time has passed — date adjustment is handled by the scheduling system, not by you.
 - RELATIVE TIME: "in X minutes/mins", "after X hours", "in 45 mins" = calculate eventDate and recurrenceTime from current time + offset. Current time: ${localDateStr}T${localTimeStr} (local time)
 
 Location Category Guidelines:

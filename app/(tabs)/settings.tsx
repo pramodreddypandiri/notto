@@ -17,7 +17,6 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  Switch,
   StatusBar,
 } from 'react-native';
 import Animated, {
@@ -59,7 +58,6 @@ export default function SettingsScreen() {
   const [city, setCity] = useState('');
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
   // Active hours preferences
@@ -78,7 +76,6 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     loadUserData();
-    loadSoundPreference();
     loadProfile();
     loadActiveHoursPreferences();
   }, []);
@@ -172,11 +169,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const loadSoundPreference = async () => {
-    await soundService.initialize();
-    setSoundEnabled(soundService.getEnabled());
-  };
-
   const handleSaveLocation = async () => {
     if (!city.trim()) {
       Alert.alert('Error', 'Please enter your city');
@@ -213,15 +205,6 @@ export default function SettingsScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleToggleSound = async (value: boolean) => {
-    setSoundEnabled(value);
-    await soundService.setEnabled(value);
-    if (value) {
-      await soundService.playSuccess();
-    }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleSignOut = async () => {
@@ -422,26 +405,6 @@ export default function SettingsScreen() {
           <Text style={[styles.sectionTitle, { color: themedColors.text.tertiary }]}>Preferences</Text>
           <View style={[styles.card, shadows.md, { backgroundColor: themedColors.surface.primary }]}>
             <SettingsRow
-              icon="volume-high-outline"
-              title="Sound Effects"
-              description="Play sounds for actions and notifications"
-              themedColors={themedColors}
-              trailing={
-                <Switch
-                  value={soundEnabled}
-                  onValueChange={handleToggleSound}
-                  trackColor={{
-                    false: colors.neutral[200],
-                    true: colors.primary[400],
-                  }}
-                  thumbColor={colors.neutral[0]}
-                />
-              }
-            />
-
-            <View style={[styles.divider, { backgroundColor: themedColors.surface.border }]} />
-
-            <SettingsRow
               icon="moon-outline"
               title="Dark Mode"
               description={themeMode === 'system' ? 'Following system setting' : isDark ? 'Dark theme active' : 'Light theme active'}
@@ -471,26 +434,6 @@ export default function SettingsScreen() {
                   ))}
                 </View>
               }
-            />
-
-            <View style={[styles.divider, { backgroundColor: themedColors.surface.border }]} />
-
-            <SettingsRow
-              icon="notifications-outline"
-              title="Notifications"
-              description="Get reminded about your plans"
-              themedColors={themedColors}
-              trailing={
-                <Ionicons
-                  name="chevron-forward"
-                  size={20}
-                  color={themedColors.text.muted}
-                />
-              }
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                Alert.alert('Coming Soon', 'Notification settings will be available in a future update.');
-              }}
             />
 
             <View style={[styles.divider, { backgroundColor: themedColors.surface.border }]} />

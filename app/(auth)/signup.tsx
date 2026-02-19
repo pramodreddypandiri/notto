@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '../../config/supabase';
 import { useTheme } from '../../context/ThemeContext';
 import { getThemedColors } from '../../theme';
-import authService from '../../services/authService';
+import authService, { validatePasswordStrength } from '../../services/authService';
 
 export default function SignUpScreen() {
   const [name, setName] = useState('');
@@ -41,8 +41,9 @@ export default function SignUpScreen() {
       return;
     }
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+    const validation = validatePasswordStrength(password);
+    if (!validation.valid) {
+      Alert.alert('Error', validation.error);
       return;
     }
 

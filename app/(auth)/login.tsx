@@ -156,6 +156,16 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={styles.forgotButton}
+          // @ts-ignore
+          onPress={() => router.push('/(auth)/forgot-password')}
+        >
+          <Text style={[styles.forgotText, { color: themedColors.text.tertiary }]}>
+            Forgot password? <Text style={styles.linkBold}>Reset it</Text>
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           // @ts-ignore
           onPress={() => router.push('/(auth)/signup')}
         >
@@ -252,6 +262,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  forgotButton: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  forgotText: {
+    fontSize: 14,
+    textAlign: 'center',
   },
   link: {
     textAlign: 'center',

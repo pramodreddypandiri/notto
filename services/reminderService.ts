@@ -91,8 +91,16 @@ class ReminderService {
             const [hours, minutes] = time.split(':');
             reminderDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
+            // If the time has already passed for a same-day reminder, fall back to
+            // "now + 2 hours" so the user still gets notified today.
+            const now = new Date();
+            if (reminderDate <= now && i === 0 && isSameDay) {
+              reminderDate.setTime(now.getTime() + 2 * 60 * 60 * 1000);
+              reminderDate.setSeconds(0, 0);
+            }
+
             // Only schedule if in the future
-            if (reminderDate > new Date()) {
+            if (reminderDate > now) {
               const daysText = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : `In ${i} days`;
               const title = i === 0 ? '⏰ Reminder' : `⏰ Upcoming Event (${daysText})`;
 

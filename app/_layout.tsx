@@ -3,11 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as Notifications from 'expo-notifications';
 import { supabase } from '../config/supabase';
 import { ThemeProvider } from '../context/ThemeContext';
 import reminderService from '../services/reminderService';
 import locationService from '../services/locationService';
 import { rescheduleSmartNotifications, cancelAllSmartNotifications } from '../services/smartNotificationEngine';
+import { scheduleOnboardingNotifications } from '../services/onboardingNotificationService';
 import './globals.css';
 
 export default function RootLayout() {
@@ -38,11 +40,24 @@ export default function RootLayout() {
       hasRescheduled.current = true;
       reminderService.rescheduleAllReminders();
       rescheduleSmartNotifications();
+      scheduleOnboardingNotifications();
     }
     if (!isAuthenticated) {
       hasRescheduled.current = false;
       cancelAllSmartNotifications();
     }
+  }, [isAuthenticated]);
+
+  // Handle notification taps — deep-link to the relevant tab
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data as Record<string, string> | undefined;
+      if (data?.type === 'onboarding' && data?.targetTab && isAuthenticated) {
+        // @ts-ignore
+        router.push(data.targetTab);
+      }
+    });
+    return () => subscription.remove();
   }, [isAuthenticated]);
 
   // Initialize location service and start geofencing/background monitoring on login
@@ -78,13 +93,17 @@ export default function RootLayout() {
     if (isAuthenticated === null) return; // Still loading
 
     const inAuthGroup = segments[0] === '(auth)';
+    // auth/callback handles deep links (password reset, OAuth) — always accessible
+    const isDeepLinkCallback = segments[0] === 'auth';
+    // reset-password is reached after a password reset deep link while authenticated
+    const isResetPassword = segments[1] === 'reset-password';
 
-    if (!isAuthenticated && !inAuthGroup) {
+    if (!isAuthenticated && !inAuthGroup && !isDeepLinkCallback) {
       // Not authenticated, redirect to login
       // @ts-ignore
       router.replace('/(auth)/login');
-    } else if (isAuthenticated && inAuthGroup) {
-      // Authenticated but in auth screens, redirect to tabs
+    } else if (isAuthenticated && inAuthGroup && !isResetPassword) {
+      // Authenticated but in auth screens (except reset-password), redirect to tabs
       // @ts-ignore
       router.replace('/(tabs)');
     }

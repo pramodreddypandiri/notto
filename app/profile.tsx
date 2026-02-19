@@ -19,7 +19,6 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  Switch,
   StatusBar,
   Modal,
   TouchableWithoutFeedback,
@@ -47,7 +46,7 @@ import WheelTimePicker from '../components/ui/WheelTimePicker';
 import { supabase } from '../config/supabase';
 import soundService from '../services/soundService';
 import { getUserProfile, UserProfile } from '../services/profileService';
-import authService from '../services/authService';
+import authService, { validatePasswordStrength } from '../services/authService';
 import preferencesService, { UserPreferences, NotificationTone } from '../services/preferencesService';
 import { autocompleteAddress, getPlaceDetailsById, AddressSuggestion } from '../services/googlePlacesService';
 
@@ -59,13 +58,13 @@ export default function ProfileScreen() {
   const [city, setCity] = useState('');
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
 
   // Account management state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [accountLoading, setAccountLoading] = useState(false);
@@ -98,7 +97,6 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       loadUserData();
-      loadSoundPreference();
       loadProfile();
       loadPreferences();
     }, [])
@@ -130,10 +128,17 @@ export default function ProfileScreen() {
   };
 
   const handleChangePassword = async () => {
-    if (newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+    if (!oldPassword) {
+      Alert.alert('Error', 'Please enter your current password');
       return;
     }
+
+    const validation = validatePasswordStrength(newPassword);
+    if (!validation.valid) {
+      Alert.alert('Error', validation.error);
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
       return;
@@ -142,14 +147,15 @@ export default function ProfileScreen() {
     setAccountLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    const result = await authService.changePassword(newPassword);
+    const result = await authService.changePassword(oldPassword, newPassword);
 
     setAccountLoading(false);
 
     if (result.success) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success', 'Password changed successfully');
+      Alert.alert('Success', 'Password changed successfully. A confirmation email has been sent to your inbox.');
       setShowPasswordModal(false);
+      setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } else {
@@ -237,11 +243,6 @@ export default function ProfileScreen() {
     } catch (error) {
       console.error('Failed to load user data:', error);
     }
-  };
-
-  const loadSoundPreference = async () => {
-    await soundService.initialize();
-    setSoundEnabled(soundService.getEnabled());
   };
 
   const handleSaveLocation = async (locationCity: string) => {
@@ -376,14 +377,6 @@ export default function ProfileScreen() {
     }
   }, []);
 
-  const handleToggleSound = async (value: boolean) => {
-    setSoundEnabled(value);
-    await soundService.setEnabled(value);
-    if (value) {
-      await soundService.playSuccess();
-    }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
 
   const handleSignOut = async () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -719,26 +712,6 @@ export default function ProfileScreen() {
           <Text style={[styles.sectionTitle, { color: themedColors.text.tertiary }]}>App Settings</Text>
           <View style={[styles.card, shadows.md, { backgroundColor: themedColors.surface.primary }]}>
             <SettingsRow
-              icon="notifications-outline"
-              title="Notifications"
-              description="Get reminded about your plans"
-              themedColors={themedColors}
-              trailing={
-                <Ionicons
-                  name="chevron-forward"
-                  size={20}
-                  color={themedColors.text.muted}
-                />
-              }
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                Alert.alert('Coming Soon', 'Notification settings will be available in a future update.');
-              }}
-            />
-
-            <View style={[styles.divider, { backgroundColor: themedColors.surface.border }]} />
-
-            <SettingsRow
               icon="moon-outline"
               title="Theme"
               description={themeMode === 'system' ? 'Following system setting' : isDark ? 'Dark theme' : 'Light theme'}
@@ -767,26 +740,6 @@ export default function ProfileScreen() {
                     </AnimatedPressable>
                   ))}
                 </View>
-              }
-            />
-
-            <View style={[styles.divider, { backgroundColor: themedColors.surface.border }]} />
-
-            <SettingsRow
-              icon="volume-high-outline"
-              title="Sound Effects"
-              description="Play sounds for actions"
-              themedColors={themedColors}
-              trailing={
-                <Switch
-                  value={soundEnabled}
-                  onValueChange={handleToggleSound}
-                  trackColor={{
-                    false: colors.neutral[200],
-                    true: colors.primary[400],
-                  }}
-                  thumbColor={colors.neutral[0]}
-                />
               }
             />
 
@@ -910,11 +863,11 @@ export default function ProfileScreen() {
                         color: themedColors.text.primary,
                       },
                     ]}
-                    placeholder="New password"
+                    placeholder="Current password"
                     placeholderTextColor={themedColors.input.placeholder}
                     secureTextEntry
-                    value={newPassword}
-                    onChangeText={setNewPassword}
+                    value={oldPassword}
+                    onChangeText={setOldPassword}
                     autoFocus={false}
                   />
 
@@ -927,7 +880,27 @@ export default function ProfileScreen() {
                         color: themedColors.text.primary,
                       },
                     ]}
-                    placeholder="Confirm password"
+                    placeholder="New password"
+                    placeholderTextColor={themedColors.input.placeholder}
+                    secureTextEntry
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                  />
+
+                  <Text style={[styles.passwordHint, { color: themedColors.text.tertiary }]}>
+                    Must be 8+ characters with a letter, number, and special character
+                  </Text>
+
+                  <TextInput
+                    style={[
+                      styles.modalInput,
+                      {
+                        backgroundColor: themedColors.input.background,
+                        borderColor: themedColors.input.border,
+                        color: themedColors.text.primary,
+                      },
+                    ]}
+                    placeholder="Confirm new password"
                     placeholderTextColor={themedColors.input.placeholder}
                     secureTextEntry
                     value={confirmPassword}
@@ -945,6 +918,7 @@ export default function ProfileScreen() {
                     <PremiumButton
                       onPress={() => {
                         setShowPasswordModal(false);
+                        setOldPassword('');
                         setNewPassword('');
                         setConfirmPassword('');
                       }}
@@ -1396,6 +1370,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[3],
     fontSize: typography.fontSize.base,
     marginBottom: spacing[3],
+  },
+  passwordHint: {
+    fontSize: typography.fontSize.xs,
+    marginBottom: spacing[3],
+    marginTop: -spacing[2],
+    lineHeight: typography.fontSize.xs * typography.lineHeight.relaxed,
   },
   bottomSheetOverlay: {
     flex: 1,

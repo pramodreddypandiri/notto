@@ -30,8 +30,13 @@ export default function AuthCallback() {
             type: type as any,
           });
           if (!error) {
-            // @ts-ignore
-            router.replace('/(tabs)');
+            if (type === 'recovery') {
+              // @ts-ignore
+              router.replace('/(auth)/reset-password');
+            } else {
+              // @ts-ignore
+              router.replace('/(tabs)');
+            }
             return;
           }
         } else if (access_token && refresh_token) {

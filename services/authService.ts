@@ -2,6 +2,26 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { supabase } from '../config/supabase';
 
+/**
+ * Validates password strength.
+ * Requires: 8+ characters, at least one letter, one number, and one special character.
+ */
+export function validatePasswordStrength(password: string): { valid: boolean; error?: string } {
+  if (password.length < 8) {
+    return { valid: false, error: 'Password must be at least 8 characters' };
+  }
+  if (!/[a-zA-Z]/.test(password)) {
+    return { valid: false, error: 'Password must contain at least one letter' };
+  }
+  if (!/\d/.test(password)) {
+    return { valid: false, error: 'Password must contain at least one number' };
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) {
+    return { valid: false, error: 'Password must contain at least one special character' };
+  }
+  return { valid: true };
+}
+
 // Ensure web browser redirects are handled properly
 WebBrowser.maybeCompleteAuthSession();
 
@@ -135,14 +155,37 @@ class AuthService {
 
   /**
    * Change user password
-   * User must be logged in
+   * Verifies the old password before applying the new one.
+   * On success, Supabase sends a security alert email to the user automatically
+   * (requires "Security Alert" email template enabled in Supabase Dashboard >
+   * Authentication > Email Templates).
    */
-  async changePassword(newPassword: string): Promise<{ success: boolean; error?: string }> {
+  async changePassword(oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
     try {
-      if (newPassword.length < 6) {
-        return { success: false, error: 'Password must be at least 6 characters' };
+      // Validate new password strength
+      const validation = validatePasswordStrength(newPassword);
+      if (!validation.valid) {
+        return { success: false, error: validation.error };
       }
 
+      // Get current user's email for re-authentication
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) {
+        return { success: false, error: 'Could not retrieve user information' };
+      }
+
+      // Verify old password by re-authenticating
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: oldPassword,
+      });
+      if (signInError) {
+        return { success: false, error: 'Current password is incorrect' };
+      }
+
+      // Update to new password
+      // Supabase will automatically send a security alert email to the user
+      // once the "Security Alert" email template is enabled in the project dashboard.
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
       });
@@ -258,11 +301,13 @@ class AuthService {
   }
 
   /**
-   * Send password reset email
+   * Send password reset email.
+   * redirectTo must be the deep link that opens the app's auth/callback screen,
+   * e.g. Linking.createURL('auth/callback').
    */
-  async sendPasswordResetEmail(email: string): Promise<{ success: boolean; error?: string }> {
+  async sendPasswordResetEmail(email: string, redirectTo: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
 
       if (error) {
         console.error('Password reset error:', error);
