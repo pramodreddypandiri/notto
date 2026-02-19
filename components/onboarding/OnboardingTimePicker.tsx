@@ -1,31 +1,47 @@
 /**
- * OnboardingTimePicker - Time selection component for onboarding
+ * OnboardingTimePicker - Custom time selection for onboarding
  *
- * Features:
- * - Native time picker experience
- * - Smooth animations
- * - Haptic feedback
+ * Fully custom UI with large, always-visible numbers.
+ * Avoids native spinner rendering issues where numbers
+ * can be invisible due to theme/platform conflicts.
  */
 
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, Pressable, Platform } from 'react-native';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-  FadeIn,
-} from 'react-native-reanimated';
+import React, { useState, useRef, useEffect } from 'react';
+import { StyleSheet, View, Text, Pressable } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius } from '../../theme';
 
 interface OnboardingTimePickerProps {
   label: string;
-  value: string | null; // HH:mm format
+  value: string | null; // HH:mm 24-hour format
   onChange: (time: string) => void;
   icon?: keyof typeof Ionicons.glyphMap;
 }
+
+const HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+
+const snapMinute = (m: number): number => {
+  const snapped = Math.round(m / 5) * 5;
+  return snapped >= 60 ? 0 : snapped;
+};
+
+const parseTime = (timeStr: string | null): { hour: number; minute: number; period: 'AM' | 'PM' } => {
+  if (!timeStr) return { hour: 7, minute: 0, period: 'AM' };
+  const [h, m] = timeStr.split(':').map(Number);
+  return {
+    hour: h % 12 || 12,
+    minute: snapMinute(m),
+    period: h >= 12 ? 'PM' : 'AM',
+  };
+};
+
+const buildTimeString = (hour: number, minute: number, period: 'AM' | 'PM'): string => {
+  let h24 = hour % 12;
+  if (period === 'PM') h24 += 12;
+  return `${h24.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+};
 
 export function OnboardingTimePicker({
   label,
@@ -33,111 +49,108 @@ export function OnboardingTimePicker({
   onChange,
   icon = 'time-outline',
 }: OnboardingTimePickerProps) {
-  const [showPicker, setShowPicker] = useState(false);
-  const scale = useSharedValue(1);
+  const { hour: initH, minute: initM, period: initP } = parseTime(value);
+  const [hour, setHour] = useState(initH);
+  const [minute, setMinute] = useState(initM);
+  const [period, setPeriod] = useState<'AM' | 'PM'>(initP);
+  const initialEmitted = useRef(false);
 
-  // Parse time string to Date
-  const getDateFromTime = (timeStr: string | null): Date => {
-    const date = new Date();
-    if (timeStr) {
-      const [hours, minutes] = timeStr.split(':').map(Number);
-      date.setHours(hours, minutes, 0, 0);
+  // Auto-select a default time on first render so Continue is enabled
+  useEffect(() => {
+    if (!value && !initialEmitted.current) {
+      initialEmitted.current = true;
+      onChange(buildTimeString(initH, initM, initP));
     }
-    return date;
+  }, []);
+
+  const emit = (h: number, m: number, p: 'AM' | 'PM') => {
+    onChange(buildTimeString(h, m, p));
   };
 
-  // Format Date to time string
-  const formatTime = (date: Date): string => {
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
-
-  // Format time for display (12-hour format)
-  const formatTimeDisplay = (timeStr: string | null): string => {
-    if (!timeStr) return 'Select time';
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const displayHours = hours % 12 || 12;
-    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-  };
-
-  const handlePress = () => {
+  const stepHour = (dir: 1 | -1) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setShowPicker(true);
+    const idx = HOURS.indexOf(hour);
+    const next = HOURS[(idx + dir + HOURS.length) % HOURS.length];
+    setHour(next);
+    emit(next, minute, period);
   };
 
-  const handleChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowPicker(false);
-    }
-    if (event.type === 'set' && selectedDate) {
-      const timeStr = formatTime(selectedDate);
-      onChange(timeStr);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    if (Platform.OS === 'android' && event.type === 'dismissed') {
-      setShowPicker(false);
-    }
+  const stepMinute = (dir: 1 | -1) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const idx = MINUTES.indexOf(minute);
+    const safeIdx = idx >= 0 ? idx : 0;
+    const next = MINUTES[(safeIdx + dir + MINUTES.length) % MINUTES.length];
+    setMinute(next);
+    emit(hour, next, period);
   };
 
-  const handlePressIn = () => {
-    scale.value = withTiming(0.98, { duration: 100 });
+  const selectPeriod = (p: 'AM' | 'PM') => {
+    if (p === period) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setPeriod(p);
+    emit(hour, minute, p);
   };
-
-  const handlePressOut = () => {
-    scale.value = withTiming(1, { duration: 100 });
-  };
-
-  const containerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
 
   return (
     <View style={styles.wrapper}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        onPress={handlePress}
-      >
-        <Animated.View style={[styles.container, value && styles.containerSelected, containerStyle]}>
-          <View style={[styles.iconContainer, value && styles.iconContainerSelected]}>
-            <Ionicons
-              name={icon}
-              size={24}
-              color={value ? colors.primary[600] : colors.neutral[500]}
-            />
-          </View>
-          <Text style={[styles.timeText, value && styles.timeTextSelected]}>
-            {formatTimeDisplay(value)}
-          </Text>
-          <Ionicons
-            name="chevron-down"
-            size={20}
-            color={colors.neutral[400]}
-          />
-        </Animated.View>
-      </Pressable>
 
-      {showPicker && (
-        <Animated.View entering={FadeIn.duration(200)}>
-          {Platform.OS === 'ios' && (
-            <View style={styles.pickerHeader}>
-              <Pressable onPress={() => setShowPicker(false)} style={styles.doneButton}>
-                <Text style={styles.doneButtonText}>Done</Text>
-              </Pressable>
-            </View>
-          )}
-          <DateTimePicker
-            value={getDateFromTime(value)}
-            mode="time"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={handleChange}
-            style={styles.picker}
-          />
-        </Animated.View>
-      )}
+      <View style={styles.card}>
+        {/* Hour column */}
+        <View style={styles.column}>
+          <Pressable onPress={() => stepHour(1)} style={styles.arrowBtn} hitSlop={12}>
+            <Ionicons name="chevron-up" size={26} color={colors.primary[500]} />
+          </Pressable>
+
+          <View style={styles.numBox}>
+            <Text style={styles.numText}>{hour.toString().padStart(2, '0')}</Text>
+          </View>
+
+          <Pressable onPress={() => stepHour(-1)} style={styles.arrowBtn} hitSlop={12}>
+            <Ionicons name="chevron-down" size={26} color={colors.primary[500]} />
+          </Pressable>
+        </View>
+
+        <Text style={styles.colon}>:</Text>
+
+        {/* Minute column */}
+        <View style={styles.column}>
+          <Pressable onPress={() => stepMinute(1)} style={styles.arrowBtn} hitSlop={12}>
+            <Ionicons name="chevron-up" size={26} color={colors.primary[500]} />
+          </Pressable>
+
+          <View style={styles.numBox}>
+            <Text style={styles.numText}>{minute.toString().padStart(2, '0')}</Text>
+          </View>
+
+          <Pressable onPress={() => stepMinute(-1)} style={styles.arrowBtn} hitSlop={12}>
+            <Ionicons name="chevron-down" size={26} color={colors.primary[500]} />
+          </Pressable>
+        </View>
+
+        {/* AM / PM toggle */}
+        <View style={styles.periodCol}>
+          <Pressable
+            onPress={() => selectPeriod('AM')}
+            style={[styles.periodBtn, period === 'AM' && styles.periodBtnActive]}
+          >
+            <Text style={[styles.periodText, period === 'AM' && styles.periodTextActive]}>AM</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => selectPeriod('PM')}
+            style={[styles.periodBtn, period === 'PM' && styles.periodBtnActive]}
+          >
+            <Text style={[styles.periodText, period === 'PM' && styles.periodTextActive]}>PM</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Friendly sub-label */}
+      <View style={styles.hint}>
+        <Ionicons name={icon} size={14} color={colors.neutral[400]} />
+        <Text style={styles.hintText}>Tap the arrows to adjust</Text>
+      </View>
     </View>
   );
 }
@@ -150,67 +163,91 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
     color: colors.neutral[600],
-    marginBottom: spacing[2],
+    marginBottom: spacing[3],
   },
-  container: {
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing[4],
-    borderRadius: borderRadius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.neutral[200],
+    justifyContent: 'center',
     backgroundColor: colors.neutral[0],
-    shadowColor: colors.neutral[900],
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1.5,
+    borderColor: colors.primary[200],
+    paddingVertical: spacing[5],
+    paddingHorizontal: spacing[6],
+    gap: spacing[3],
+    shadowColor: colors.primary[500],
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
-  containerSelected: {
-    borderColor: colors.primary[400],
-    backgroundColor: colors.primary[50],
+  column: {
+    alignItems: 'center',
+    gap: spacing[2],
   },
-  iconContainer: {
-    width: 44,
-    height: 44,
+  arrowBtn: {
+    padding: spacing[2],
     borderRadius: borderRadius.md,
-    backgroundColor: colors.neutral[100],
+  },
+  numBox: {
+    width: 76,
+    height: 76,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.primary[50],
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: spacing[3],
+    borderWidth: 2,
+    borderColor: colors.primary[200],
   },
-  iconContainerSelected: {
-    backgroundColor: colors.primary[100],
-  },
-  timeText: {
-    flex: 1,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral[400],
-  },
-  timeTextSelected: {
+  numText: {
+    fontSize: 38,
+    fontWeight: typography.fontWeight.bold,
     color: colors.primary[700],
+    letterSpacing: -1,
   },
-  pickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[2],
-    backgroundColor: colors.neutral[50],
-    borderTopLeftRadius: borderRadius.lg,
-    borderTopRightRadius: borderRadius.lg,
+  colon: {
+    fontSize: 38,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.primary[300],
+    marginBottom: 4,
   },
-  doneButton: {
+  periodCol: {
+    gap: spacing[2],
+    marginLeft: spacing[1],
+  },
+  periodBtn: {
     paddingVertical: spacing[2],
-    paddingHorizontal: spacing[4],
-  },
-  doneButtonText: {
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.primary[600],
-  },
-  picker: {
+    paddingHorizontal: spacing[3],
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.neutral[200],
     backgroundColor: colors.neutral[50],
+    minWidth: 52,
+    alignItems: 'center',
+  },
+  periodBtnActive: {
+    backgroundColor: colors.primary[600],
+    borderColor: colors.primary[600],
+  },
+  periodText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.neutral[500],
+  },
+  periodTextActive: {
+    color: colors.neutral[0],
+  },
+  hint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    marginTop: spacing[2],
+    paddingLeft: spacing[1],
+  },
+  hintText: {
+    fontSize: typography.fontSize.xs,
+    color: colors.neutral[400],
   },
 });
 
