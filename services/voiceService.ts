@@ -135,16 +135,9 @@ class VoiceService {
    */
   async startRecording(): Promise<void> {
     try {
-      // Check permissions first
-      const hasPermission = await this.hasPermissions();
-      if (!hasPermission) {
-        const granted = await this.requestPermissions();
-        if (!granted) {
-          throw new Error('Microphone permission not granted');
-        }
-      }
-
-      // Set audio mode for recording
+      // Set audio mode for recording BEFORE requesting permissions.
+      // On iOS, AVAudioSession.requestRecordPermission requires allowsRecordingIOS: true
+      // to be set first, otherwise the first permission request silently fails.
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -152,6 +145,15 @@ class VoiceService {
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
       });
+
+      // Check/request permissions after audio mode is configured
+      const hasPermission = await this.hasPermissions();
+      if (!hasPermission) {
+        const granted = await this.requestPermissions();
+        if (!granted) {
+          throw new Error('Microphone permission not granted');
+        }
+      }
 
       // Create and start recording
       const { recording } = await Audio.Recording.createAsync(
