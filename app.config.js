@@ -1,6 +1,6 @@
 export default {
   expo: {
-    name: "Voice Notes",
+    name: "Notto",
     slug: "notes",
     version: "1.0.0",
     orientation: "portrait",
