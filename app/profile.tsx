@@ -512,7 +512,7 @@ export default function ProfileScreen() {
               <>
                 <View style={styles.profileSummary}>
                   <View style={styles.profileSummaryRow}>
-                    <Text style={[styles.profileLabel, { color: themedColors.text.primary }]}>Personality Profile</Text>
+                    <Text style={[styles.profileLabel, { color: themedColors.text.primary }]}>About You</Text>
                     <View style={styles.profileBadge}>
                       <Ionicons name="checkmark-circle" size={16} color={colors.semantic.success} />
                       <Text style={styles.profileBadgeText}>Complete</Text>
@@ -525,7 +525,7 @@ export default function ProfileScreen() {
                 <View style={[styles.divider, { backgroundColor: themedColors.surface.border }]} />
                 <SettingsRow
                   icon="refresh-outline"
-                  title="Retake Personality Quiz"
+                  title="Retake Quiz"
                   description="Update your preferences"
                   themedColors={themedColors}
                   trailing={
@@ -537,7 +537,7 @@ export default function ProfileScreen() {
                   }
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    router.push('/onboarding' as any);
+                    router.push({ pathname: '/onboarding', params: { retake: 'true' } } as any);
                   }}
                 />
               </>

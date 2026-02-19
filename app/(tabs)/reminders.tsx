@@ -243,41 +243,43 @@ export default function RemindersScreen() {
         </Text>
 
         <View style={styles.reminderMeta}>
-          {/* Type badge */}
-          <View
-            style={[
-              styles.typeBadge,
-              {
-                backgroundColor:
-                  item.note.reminder_type === 'recurring'
-                    ? colors.accent.violet.light
-                    : colors.accent.sky.light,
-              },
-            ]}
-          >
-            <Ionicons
-              name={item.note.reminder_type === 'recurring' ? 'repeat' : 'calendar-outline'}
-              size={12}
-              color={
-                item.note.reminder_type === 'recurring'
-                  ? colors.accent.violet.dark
-                  : colors.accent.sky.dark
-              }
-            />
-            <Text
+          {/* Type badge — only show when a time/schedule is actually set */}
+          {!!item.timeDisplay && (
+            <View
               style={[
-                styles.typeBadgeText,
+                styles.typeBadge,
                 {
-                  color:
+                  backgroundColor:
                     item.note.reminder_type === 'recurring'
-                      ? colors.accent.violet.dark
-                      : colors.accent.sky.dark,
+                      ? colors.accent.violet.light
+                      : colors.accent.sky.light,
                 },
               ]}
             >
-              {item.timeDisplay}
-            </Text>
-          </View>
+              <Ionicons
+                name={item.note.reminder_type === 'recurring' ? 'repeat' : 'calendar-outline'}
+                size={12}
+                color={
+                  item.note.reminder_type === 'recurring'
+                    ? colors.accent.violet.dark
+                    : colors.accent.sky.dark
+                }
+              />
+              <Text
+                style={[
+                  styles.typeBadgeText,
+                  {
+                    color:
+                      item.note.reminder_type === 'recurring'
+                        ? colors.accent.violet.dark
+                        : colors.accent.sky.dark,
+                  },
+                ]}
+              >
+                {item.timeDisplay}
+              </Text>
+            </View>
+          )}
 
           {/* Event location if available */}
           {item.note.event_location && (

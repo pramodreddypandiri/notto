@@ -7,6 +7,7 @@ import { supabase } from '../config/supabase';
 import { ThemeProvider } from '../context/ThemeContext';
 import reminderService from '../services/reminderService';
 import locationService from '../services/locationService';
+import { rescheduleSmartNotifications, cancelAllSmartNotifications } from '../services/smartNotificationEngine';
 import './globals.css';
 
 export default function RootLayout() {
@@ -36,9 +37,11 @@ export default function RootLayout() {
     if (isAuthenticated && !hasRescheduled.current) {
       hasRescheduled.current = true;
       reminderService.rescheduleAllReminders();
+      rescheduleSmartNotifications();
     }
     if (!isAuthenticated) {
       hasRescheduled.current = false;
+      cancelAllSmartNotifications();
     }
   }, [isAuthenticated]);
 

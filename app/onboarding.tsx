@@ -5,7 +5,7 @@
  * Questions: Age, Gender, Wake/Bed times, Hobbies, Tone, Self-description
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -24,7 +24,7 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -39,6 +39,7 @@ import {
 import { PremiumButton } from '../components/ui/PremiumButton';
 import { AnimatedPressable } from '../components/ui/AnimatedPressable';
 import {
+  getUserProfile,
   updateUserProfile,
   completeOnboarding,
 } from '../services/profileService';
@@ -77,7 +78,10 @@ type Step = 'welcome' | 'age' | 'gender' | 'wake_time' | 'bed_time' | 'hobbies' 
 const STEP_ORDER: Step[] = ['welcome', 'age', 'gender', 'wake_time', 'bed_time', 'hobbies', 'tone', 'self_description', 'complete'];
 
 export default function OnboardingFlow() {
-  const [step, setStep] = useState<Step>('welcome');
+  const { retake } = useLocalSearchParams<{ retake?: string }>();
+  const isRetake = retake === 'true';
+
+  const [step, setStep] = useState<Step>(isRetake ? 'age' : 'welcome');
 
   // Profile data
   const [profileData, setProfileData] = useState({
@@ -91,6 +95,25 @@ export default function OnboardingFlow() {
   });
 
   const [isLoading, setIsLoading] = useState(false);
+
+  // When retaking, load existing profile data
+  useEffect(() => {
+    if (isRetake) {
+      getUserProfile().then((profile) => {
+        if (profile) {
+          setProfileData({
+            age_range: profile.age_range ?? null,
+            gender: profile.gender ?? null,
+            wake_up_time: profile.wake_up_time ?? null,
+            bed_time: profile.bed_time ?? null,
+            hobbies: profile.hobbies ?? '',
+            tone: profile.tone ?? null,
+            self_description: profile.self_description ?? '',
+          });
+        }
+      });
+    }
+  }, [isRetake]);
 
   const getCurrentStepNumber = (): number => {
     return STEP_ORDER.indexOf(step) + 1;
@@ -112,10 +135,13 @@ export default function OnboardingFlow() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     const currentIndex = STEP_ORDER.indexOf(step);
-    if (currentIndex > 0 && step !== 'complete') {
+    const minIndex = isRetake ? STEP_ORDER.indexOf('age') : 0;
+    if (currentIndex > minIndex && step !== 'complete') {
       setStep(STEP_ORDER[currentIndex - 1]);
+    } else if (isRetake && step === 'age') {
+      router.back();
     }
-  }, [step]);
+  }, [step, isRetake]);
 
   const handleComplete = async () => {
     setIsLoading(true);

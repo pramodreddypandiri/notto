@@ -452,11 +452,17 @@ export const parseNote = async (transcript: string): Promise<ParsedNote> => {
   }
 
   try {
+    // Build local date/time strings — toISOString() is UTC and shifts the date for UTC− users
+    // e.g. 11:58 PM EST on Feb 18 → toISOString() → Feb 19 → AI thinks tomorrow = Feb 20 ❌
+    const _now = new Date();
+    const localDateStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+    const localTimeStr = `${String(_now.getHours()).padStart(2, '0')}:${String(_now.getMinutes()).padStart(2, '0')}`;
+
     const prompt = `Parse this voice note into structured data. Return ONLY valid JSON.
 
 Voice note: "${transcript}"
 
-Today's date: ${new Date().toISOString().split('T')[0]}
+Today's date: ${localDateStr}
 
 Return format:
 {
@@ -497,7 +503,7 @@ Reminder Detection Guidelines:
 - Only use vague defaults when no specific time is given: "morning" = "09:00", "afternoon" = "14:00", "evening" = "18:00"
 - If multiple times are mentioned (e.g. "at 11 a.m. and 2 p.m."), use the FIRST time for recurrenceTime and put ALL times in additionalTimes array
 - Parse dates relative to today's date
-- RELATIVE TIME: "in X minutes/mins", "after X hours", "in 45 mins" = calculate eventDate and recurrenceTime from current time + offset. Current time: ${new Date().toISOString()}
+- RELATIVE TIME: "in X minutes/mins", "after X hours", "in 45 mins" = calculate eventDate and recurrenceTime from current time + offset. Current time: ${localDateStr}T${localTimeStr} (local time)
 
 Location Category Guidelines:
 - "grocery": food items, household supplies

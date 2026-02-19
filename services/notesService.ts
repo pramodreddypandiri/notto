@@ -132,6 +132,9 @@ export const createNoteWithReminder = async (
       return 'low';
     };
 
+    // Journal notes are never reminders, regardless of what the AI detected
+    const isJournal = effectiveNoteType === 'journal';
+
     // Prepare note data
     const noteData: any = {
       user_id: user.id,
@@ -143,16 +146,16 @@ export const createNoteWithReminder = async (
       location_category: parsedData.locationCategory || null,
       shopping_items: parsedData.shoppingItems || null,
       location_completed: false,
-      // New reminder fields
-      is_reminder: hasNewReminder || isReminder,
-      reminder_type: parsedData.reminder?.reminderType || null,
-      event_date: parsedData.reminder?.eventDate || null,
-      event_location: parsedData.reminder?.eventLocation || null,
-      reminder_days_before: parsedData.reminder?.reminderDaysBefore || 1,
-      recurrence_pattern: parsedData.reminder?.recurrencePattern || null,
-      recurrence_day: parsedData.reminder?.recurrenceDay ?? null,
-      recurrence_time: parsedData.reminder?.recurrenceTime || '09:00',
-      reminder_active: true,
+      // New reminder fields — cleared for journal notes
+      is_reminder: isJournal ? false : (hasNewReminder || isReminder),
+      reminder_type: isJournal ? null : (parsedData.reminder?.reminderType || null),
+      event_date: isJournal ? null : (parsedData.reminder?.eventDate || null),
+      event_location: isJournal ? null : (parsedData.reminder?.eventLocation || null),
+      reminder_days_before: isJournal ? 1 : (parsedData.reminder?.reminderDaysBefore || 1),
+      recurrence_pattern: isJournal ? null : (parsedData.reminder?.recurrencePattern || null),
+      recurrence_day: isJournal ? null : (parsedData.reminder?.recurrenceDay ?? null),
+      recurrence_time: isJournal ? '09:00' : (parsedData.reminder?.recurrenceTime || '09:00'),
+      reminder_active: isJournal ? false : true,
       // Place intent fields
       place_intent: parsedData.placeIntent?.detected || false,
       place_search_query: parsedData.placeIntent?.searchQuery || null,
@@ -468,9 +471,20 @@ export const updateNoteContent = async (
   updates: { transcript?: string; note_type?: NoteType }
 ): Promise<boolean> => {
   try {
+    // When changing a note to 'journal', clear all reminder fields so it
+    // no longer appears in tasks or reminders views.
+    const dbUpdates: Record<string, any> = { ...updates };
+    if (updates.note_type === 'journal') {
+      dbUpdates.is_reminder = false;
+      dbUpdates.reminder_active = false;
+      dbUpdates.event_date = null;
+      dbUpdates.reminder_type = null;
+      dbUpdates.recurrence_pattern = null;
+    }
+
     const { error } = await supabase
       .from('notes')
-      .update(updates)
+      .update(dbUpdates)
       .eq('id', noteId);
 
     if (error) throw error;
