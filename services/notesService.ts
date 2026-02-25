@@ -153,6 +153,7 @@ export const createNoteWithReminder = async (
       event_location: isJournal ? null : (parsedData.reminder?.eventLocation || null),
       reminder_days_before: isJournal ? 1 : (parsedData.reminder?.reminderDaysBefore || 1),
       recurrence_pattern: isJournal ? null : (parsedData.reminder?.recurrencePattern || null),
+      recurrence_interval: isJournal ? null : (parsedData.reminder?.recurrenceInterval ?? null),
       recurrence_day: isJournal ? null : (parsedData.reminder?.recurrenceDay ?? null),
       recurrence_time: isJournal ? '09:00' : (parsedData.reminder?.recurrenceTime || '09:00'),
       reminder_active: isJournal ? false : true,
@@ -480,6 +481,7 @@ export const updateNoteContent = async (
       dbUpdates.event_date = null;
       dbUpdates.reminder_type = null;
       dbUpdates.recurrence_pattern = null;
+      dbUpdates.recurrence_interval = null;
     }
 
     const { error } = await supabase

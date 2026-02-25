@@ -275,7 +275,7 @@ export async function scheduleWeeklyNotifications(): Promise<void> {
             title,
             body,
             sound: true,
-            data: { type: 'journal_reminder', notificationType },
+            data: { type: 'journal_reminder', notificationType, targetTab: '/(tabs)/journal' },
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,

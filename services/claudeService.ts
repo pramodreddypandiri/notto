@@ -17,16 +17,17 @@ export type NoteLocationCategory =
 
 // Reminder types
 export type ReminderType = 'one-time' | 'recurring';
-export type RecurrencePattern = 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type RecurrencePattern = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'interval';
 
 // Parsed reminder info
 export interface ParsedReminder {
   isReminder: boolean;
   reminderType?: ReminderType;
-  eventDate?: string; // ISO date string for one-time events
+  eventDate?: string; // ISO date string for one-time events OR start date for interval recurring
   eventLocation?: string;
   reminderDaysBefore?: number; // days before to remind
   recurrencePattern?: RecurrencePattern;
+  recurrenceInterval?: number; // for 'interval' pattern: every N days
   recurrenceDay?: number; // 0-6 for weekly (0=Sunday), 1-31 for monthly
   recurrenceTime?: string; // HH:mm format (first/primary time)
   additionalTimes?: string[]; // All mentioned times in HH:mm format (for multiple reminders)
@@ -215,30 +216,99 @@ const detectReminderLocally = (transcript: string): ParsedReminder | null => {
 
   const reminder: ParsedReminder = { isReminder: true };
 
-  // Check for recurring patterns
-  const recurringPatterns = [
-    { pattern: /every\s+(day|daily)/i, recurrence: 'daily' as RecurrencePattern },
-    { pattern: /every\s+monday/i, recurrence: 'weekly' as RecurrencePattern, day: 1 },
-    { pattern: /every\s+tuesday/i, recurrence: 'weekly' as RecurrencePattern, day: 2 },
-    { pattern: /every\s+wednesday/i, recurrence: 'weekly' as RecurrencePattern, day: 3 },
-    { pattern: /every\s+thursday/i, recurrence: 'weekly' as RecurrencePattern, day: 4 },
-    { pattern: /every\s+friday/i, recurrence: 'weekly' as RecurrencePattern, day: 5 },
-    { pattern: /every\s+saturday/i, recurrence: 'weekly' as RecurrencePattern, day: 6 },
-    { pattern: /every\s+sunday/i, recurrence: 'weekly' as RecurrencePattern, day: 0 },
-    { pattern: /every\s+week/i, recurrence: 'weekly' as RecurrencePattern },
-    { pattern: /every\s+month/i, recurrence: 'monthly' as RecurrencePattern },
-    { pattern: /weekly/i, recurrence: 'weekly' as RecurrencePattern },
-    { pattern: /daily/i, recurrence: 'daily' as RecurrencePattern },
-    { pattern: /monthly/i, recurrence: 'monthly' as RecurrencePattern },
+  // Word-to-number map for interval detection
+  const intervalWordToNum: Record<string, number> = {
+    one: 1, two: 2, three: 3, four: 4, five: 5,
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  };
+
+  // Check for "every N days" interval patterns FIRST (before generic weekly/daily)
+  // e.g. "every 3 days", "every two days", "every other day"
+  const intervalPatterns = [
+    // "every 3 days", "every 7 days"
+    { pattern: /every\s+(\d+)\s*days?\b/i },
+    // "every two days", "every three days" etc.
+    { pattern: /every\s+(one|two|three|four|five|six|seven|eight|nine|ten)\s*days?\b/i, wordMatch: true },
+    // "every other day" = every 2 days
+    { pattern: /every\s+other\s+day\b/i, fixedAmount: 2 },
+    // "every couple of days" = every 2 days
+    { pattern: /every\s+(?:couple|few)\s+(?:of\s+)?days?\b/i, fixedAmount: 2 },
   ];
 
-  for (const { pattern, recurrence, day } of recurringPatterns) {
-    if (pattern.test(lower)) {
-      reminder.reminderType = 'recurring';
-      reminder.recurrencePattern = recurrence;
-      if (day !== undefined) reminder.recurrenceDay = day;
-      break;
+  let intervalDetected = false;
+  for (const entry of intervalPatterns) {
+    const match = lower.match(entry.pattern);
+    if (match) {
+      let interval: number;
+      if ('fixedAmount' in entry && entry.fixedAmount !== undefined) {
+        interval = entry.fixedAmount;
+      } else if ('wordMatch' in entry && entry.wordMatch) {
+        interval = intervalWordToNum[match[1].toLowerCase()] || 1;
+      } else {
+        interval = parseInt(match[1]);
+      }
+
+      if (interval > 0) {
+        reminder.reminderType = 'recurring';
+        reminder.recurrencePattern = 'interval';
+        reminder.recurrenceInterval = interval;
+        intervalDetected = true;
+        break;
+      }
     }
+  }
+
+  // Check for recurring patterns (only if interval not already detected)
+  if (!intervalDetected) {
+    const recurringPatterns = [
+      { pattern: /every\s+(day|daily)/i, recurrence: 'daily' as RecurrencePattern },
+      { pattern: /every\s+monday/i, recurrence: 'weekly' as RecurrencePattern, day: 1 },
+      { pattern: /every\s+tuesday/i, recurrence: 'weekly' as RecurrencePattern, day: 2 },
+      { pattern: /every\s+wednesday/i, recurrence: 'weekly' as RecurrencePattern, day: 3 },
+      { pattern: /every\s+thursday/i, recurrence: 'weekly' as RecurrencePattern, day: 4 },
+      { pattern: /every\s+friday/i, recurrence: 'weekly' as RecurrencePattern, day: 5 },
+      { pattern: /every\s+saturday/i, recurrence: 'weekly' as RecurrencePattern, day: 6 },
+      { pattern: /every\s+sunday/i, recurrence: 'weekly' as RecurrencePattern, day: 0 },
+      { pattern: /every\s+week/i, recurrence: 'weekly' as RecurrencePattern },
+      { pattern: /every\s+month/i, recurrence: 'monthly' as RecurrencePattern },
+      { pattern: /weekly/i, recurrence: 'weekly' as RecurrencePattern },
+      { pattern: /daily/i, recurrence: 'daily' as RecurrencePattern },
+      { pattern: /monthly/i, recurrence: 'monthly' as RecurrencePattern },
+    ];
+
+    for (const { pattern, recurrence, day } of recurringPatterns) {
+      if (pattern.test(lower)) {
+        reminder.reminderType = 'recurring';
+        reminder.recurrencePattern = recurrence;
+        if (day !== undefined) reminder.recurrenceDay = day;
+        break;
+      }
+    }
+  }
+
+  // Detect start date for interval reminders
+  // "starting from March 5", "starting tomorrow", "from next Monday", "starting today"
+  if (reminder.recurrencePattern === 'interval') {
+    const now = new Date();
+    let startDate: Date | null = null;
+
+    if (/(?:starting|start|from)\s+(?:from\s+)?today/i.test(lower)) {
+      // Start from today
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (/(?:starting|start|from)\s+(?:from\s+)?tomorrow/i.test(lower)) {
+      // Start from tomorrow
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    }
+
+    // Default: no start date mentioned → start from tomorrow
+    if (!startDate) {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    }
+
+    const yyyy = startDate.getFullYear();
+    const mm = String(startDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(startDate.getDate()).padStart(2, '0');
+    reminder.eventDate = `${yyyy}-${mm}-${dd}`;
   }
 
   // Check for time of day - extract ALL explicit times, then fall back to vague keywords
@@ -480,7 +550,8 @@ Return format:
     "eventDate": string (ISO date for one-time events, e.g. "2025-02-18"),
     "eventLocation": string (location of the event if mentioned),
     "reminderDaysBefore": number (days before to start reminding, default 1),
-    "recurrencePattern": "daily" | "weekly" | "monthly" | "yearly" (for recurring),
+    "recurrencePattern": "daily" | "weekly" | "monthly" | "yearly" | "interval" (for recurring),
+    "recurrenceInterval": number (for "interval" pattern only: every N days, e.g. 3 for "every 3 days"),
     "recurrenceDay": number (0-6 for weekly where 0=Sunday, 1-31 for monthly),
     "recurrenceTime": string (HH:mm format, e.g. "09:00" - use the FIRST specific time mentioned),
     "additionalTimes": string[] (all mentioned times in HH:mm format, when multiple times exist, e.g. ["11:00", "14:00"]),
@@ -496,6 +567,7 @@ Return format:
 Reminder Detection Guidelines:
 - "remind me", "don't forget", "notify me" indicate reminders
 - "every Monday", "every day", "weekly" = recurring reminder
+- "every 3 days", "every two days", "every other day" = interval recurring (recurrencePattern: "interval", recurrenceInterval: N). eventDate = start date (use tomorrow if no start date mentioned)
 - "on Feb 18th", "next Tuesday", "tomorrow" = one-time event
 - "remind me 2 days before" = reminderDaysBefore: 2
 - IMPORTANT: Extract specific times when mentioned. "at 11 a.m." = "11:00", "at 2 p.m." = "14:00", "at 3:30 PM" = "15:30"
@@ -519,6 +591,8 @@ Location Category Guidelines:
 
 Examples:
 "Remind me every Monday morning to post on LinkedIn" -> {"type": "reminder", "summary": "Post on LinkedIn", "reminder": {"isReminder": true, "reminderType": "recurring", "recurrencePattern": "weekly", "recurrenceDay": 1, "recurrenceTime": "09:00", "reminderSummary": "Post on LinkedIn"}}
+"Check body weight every three days" -> {"type": "reminder", "summary": "Check body weight", "reminder": {"isReminder": true, "reminderType": "recurring", "recurrencePattern": "interval", "recurrenceInterval": 3, "eventDate": "TOMORROW_DATE", "recurrenceTime": "09:00", "reminderSummary": "Check body weight"}}
+"Remind me to take vitamins every 2 days starting today" -> {"type": "reminder", "summary": "Take vitamins", "reminder": {"isReminder": true, "reminderType": "recurring", "recurrencePattern": "interval", "recurrenceInterval": 2, "eventDate": "TODAY_DATE", "recurrenceTime": "09:00", "reminderSummary": "Take vitamins"}}
 "Do laundry tomorrow at 11 a.m. and 2 p.m." -> {"type": "reminder", "summary": "Do laundry", "reminder": {"isReminder": true, "reminderType": "one-time", "eventDate": "TOMORROW_DATE", "recurrenceTime": "11:00", "additionalTimes": ["11:00", "14:00"], "reminderSummary": "Do laundry"}}
 "I have an event on Feb 18th, remind me 2 days before" -> {"type": "reminder", "summary": "Event on Feb 18th", "reminder": {"isReminder": true, "reminderType": "one-time", "eventDate": "2025-02-18", "reminderDaysBefore": 2, "reminderSummary": "Event on Feb 18th"}}
 "Remind me in 45 minutes to take medicine" -> {"type": "reminder", "summary": "Take medicine", "reminder": {"isReminder": true, "reminderType": "one-time", "eventDate": "TODAY_DATE", "recurrenceTime": "CURRENT_TIME_PLUS_45_MINS", "reminderSummary": "Take medicine"}}

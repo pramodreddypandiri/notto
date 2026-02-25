@@ -31,9 +31,11 @@ import { colors, typography, spacing, borderRadius, shadows, getThemedColors } f
 // Components
 import AnimatedPressable from '../../components/ui/AnimatedPressable';
 import { TopBar } from '../../components/common/TopBar';
+import EditNoteModal from '../../components/notes/EditNoteModal';
 
 // Services
 import reminderService, { TodaysReminder } from '../../services/reminderService';
+import { updateNoteContent, NoteType } from '../../services/notesService';
 
 // Context
 import { useTheme } from '../../context/ThemeContext';
@@ -49,6 +51,8 @@ export default function RemindersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingReminder, setEditingReminder] = useState<TodaysReminder | null>(null);
 
   // Theme
   const { isDark } = useTheme();
@@ -183,14 +187,20 @@ export default function RemindersScreen() {
     );
   };
 
-  // Edit task (placeholder - would open a modal)
-  const handleEdit = (_reminder: TodaysReminder) => {
+  // Edit task
+  const handleEdit = (reminder: TodaysReminder) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert(
-      'Edit Task',
-      'Edit functionality coming soon. You can delete and recreate the task for now.',
-      [{ text: 'OK' }]
-    );
+    setEditingReminder(reminder);
+    setShowEditModal(true);
+  };
+
+  const handleEditSave = async (noteId: string, transcript: string, noteType: NoteType) => {
+    const success = await updateNoteContent(noteId, { transcript, note_type: noteType });
+    setShowEditModal(false);
+    setEditingReminder(null);
+    if (success) {
+      loadReminders();
+    }
   };
 
   // Render reminder item
@@ -489,6 +499,19 @@ export default function RemindersScreen() {
           }
         />
       )}
+
+      <EditNoteModal
+        visible={showEditModal}
+        noteId={editingReminder?.note.id ?? null}
+        transcript={editingReminder?.note.transcript ?? ''}
+        noteType={((editingReminder?.note as any)?.note_type as NoteType) ?? 'task'}
+        onSave={handleEditSave}
+        onCancel={() => {
+          setShowEditModal(false);
+          setEditingReminder(null);
+        }}
+        themedColors={themedColors}
+      />
     </View>
   );
 }

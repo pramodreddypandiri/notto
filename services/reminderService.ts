@@ -35,6 +35,7 @@ export interface ReminderNote {
   event_location: string | null;
   reminder_days_before: number;
   recurrence_pattern: RecurrencePattern | null;
+  recurrence_interval: number | null; // for 'interval' pattern: every N days, start date in event_date
   recurrence_day: number | null;
   recurrence_time: string;
   notification_ids: string[] | null;
@@ -117,18 +118,28 @@ class ReminderService {
           }
         }
       } else if (reminder.reminderType === 'recurring') {
-        // Schedule recurring notification for each time
-        for (const time of times) {
-          const notifId = await this.scheduleRecurringNotification(
-            transcript,
-            reminder.recurrencePattern || 'weekly',
-            reminder.recurrenceDay,
-            time,
+        if (reminder.recurrencePattern === 'interval' && reminder.recurrenceInterval) {
+          // "every N days" — pre-schedule next 20 occurrences from the start date
+          const intervalIds = await this.scheduleIntervalNotifications(
+            reminder.recurrenceInterval,
+            reminder.eventDate,   // start date (or null → tomorrow)
+            times,
             reminder.reminderSummary || transcript
           );
-
-          if (notifId) {
-            notificationIds.push(notifId);
+          notificationIds.push(...intervalIds);
+        } else {
+          // Standard recurring (daily, weekly, monthly, yearly)
+          for (const time of times) {
+            const notifId = await this.scheduleRecurringNotification(
+              transcript,
+              reminder.recurrencePattern || 'weekly',
+              reminder.recurrenceDay,
+              time,
+              reminder.reminderSummary || transcript
+            );
+            if (notifId) {
+              notificationIds.push(notifId);
+            }
           }
         }
       }
@@ -220,6 +231,71 @@ class ReminderService {
       console.error('[ReminderService] Failed to schedule recurring notification:', error);
       return null;
     }
+  }
+
+  /**
+   * Schedule notifications for "every N days" interval reminders.
+   * Pre-schedules the next 20 occurrences from the start date.
+   * - If startDateStr provided: first occurrence is on that date
+   * - If not provided: first occurrence is tomorrow
+   */
+  private async scheduleIntervalNotifications(
+    intervalDays: number,
+    startDateStr: string | undefined,
+    times: string[],
+    summary: string
+  ): Promise<string[]> {
+    const notificationIds: string[] = [];
+    const now = new Date();
+
+    // Determine the first occurrence date
+    let firstDate: Date;
+    if (startDateStr) {
+      firstDate = this.parseLocalDate(startDateStr);
+    } else {
+      // Default: start from tomorrow
+      firstDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    }
+
+    const MAX_OCCURRENCES = 20;
+    let count = 0;
+
+    for (let i = 0; count < MAX_OCCURRENCES; i++) {
+      const occurrenceDate = new Date(firstDate);
+      occurrenceDate.setDate(firstDate.getDate() + i * intervalDays);
+
+      for (const time of times) {
+        const [hours, minutes] = time.split(':').map(Number);
+        const notifDate = new Date(occurrenceDate);
+        notifDate.setHours(hours, minutes, 0, 0);
+
+        // Only schedule future notifications
+        if (notifDate > now) {
+          const occurrenceNum = i + 1;
+          const title = occurrenceNum === 1 ? '🔔 Reminder' : `🔁 Every ${intervalDays}d reminder`;
+
+          try {
+            const notifId = await notificationService.scheduleNotification(
+              title,
+              summary,
+              notifDate
+            );
+            if (notifId) {
+              notificationIds.push(notifId);
+              count++;
+            }
+          } catch (err) {
+            console.error('[ReminderService] Failed to schedule interval notification:', err);
+          }
+        }
+      }
+
+      // Safety: stop after checking 200 iterations (prevent infinite loop)
+      if (i >= 200) break;
+    }
+
+    console.log(`[ReminderService] Scheduled ${notificationIds.length} interval notifications (every ${intervalDays} days)`);
+    return notificationIds;
   }
 
   /**
@@ -319,14 +395,16 @@ class ReminderService {
         .gte('reminder_completed_at', `${todayStr}T00:00:00`)
         .lt('reminder_completed_at', `${tomorrowStr}T00:00:00`);
 
-      // Also get one-time reminders that were completed TODAY
+      // Also get reminders that were completed TODAY
       // (these have reminder_active = false, so they're excluded from the above query)
+      // Note: do NOT filter by reminder_type here — notes with reminder_type = null
+      // (common for text-created or older reminders) must also be included, otherwise
+      // they disappear from the list after being marked done instead of moving to Completed.
       const { data: completedTodayReminders } = await supabase
         .from('notes')
         .select('*')
         .eq('user_id', user.id)
         .eq('is_reminder', true)
-        .eq('reminder_type', 'one-time')
         .eq('reminder_active', false)
         .not('reminder_completed_at', 'is', null)
         .gte('reminder_completed_at', `${todayStr}T00:00:00`)
@@ -598,12 +676,25 @@ class ReminderService {
           return reminder.recurrence_day === todayDay;
         case 'monthly':
           return reminder.recurrence_day === today.getDate();
-        case 'yearly':
+        case 'yearly': {
           // Simplified: check if it's the right day of year
           const dayOfYear = Math.floor(
             (today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / 86400000
           );
           return reminder.recurrence_day === dayOfYear;
+        }
+        case 'interval': {
+          // "every N days" — today is an occurrence if (today - startDate) is divisible by interval
+          if (!reminder.recurrence_interval || !reminder.event_date) return false;
+          const startDate = this.parseLocalDate(reminder.event_date);
+          startDate.setHours(0, 0, 0, 0);
+          // Don't show before start date
+          if (todayNormalized < startDate) return false;
+          const daysSinceStart = Math.round(
+            (todayNormalized.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          return daysSinceStart % reminder.recurrence_interval === 0;
+        }
         default:
           return false;
       }
@@ -690,36 +781,56 @@ class ReminderService {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return false;
 
-      const todayStr = new Date().toISOString().split('T')[0];
+      // Use local date (not UTC) so the stored completed_date matches the date
+      // used in getTodaysReminders, which also works off local midnight.
+      const localToday = new Date();
+      localToday.setHours(0, 0, 0, 0);
+      const todayStr = localToday.toISOString().split('T')[0];
 
       // Get the note to check its type
-      const { data: note } = await supabase
+      const { data: note, error: fetchError } = await supabase
         .from('notes')
         .select('reminder_type, is_reminder, note_type')
         .eq('id', noteId)
         .single();
 
-      // Check if this is an unscheduled task (note_type = 'task', is_reminder = false)
-      const isUnscheduledTask = !note?.is_reminder && note?.note_type === 'task';
+      if (fetchError) {
+        console.error('[ReminderService] Failed to fetch note for markReminderDone:', fetchError);
+        return false;
+      }
 
       if (note?.reminder_type === 'recurring') {
-        // For recurring reminders, add to completions table
-        await supabase
+        // For recurring reminders, add to completions table.
+        // onConflict is required so a re-tap or duplicate call doesn't fail on the
+        // UNIQUE(note_id, completed_date) constraint and silently return false.
+        const { error: upsertError } = await supabase
           .from('reminder_completions')
-          .upsert({
-            note_id: noteId,
-            user_id: user.id,
-            completed_date: todayStr,
-          });
+          .upsert(
+            {
+              note_id: noteId,
+              user_id: user.id,
+              completed_date: todayStr,
+              completed_at: new Date().toISOString(),
+            },
+            { onConflict: 'note_id,completed_date' }
+          );
+        if (upsertError) {
+          console.error('[ReminderService] Failed to upsert completion:', upsertError);
+          return false;
+        }
       } else {
         // For one-time reminders AND unscheduled tasks, mark as completed
-        await supabase
+        const { error: updateError } = await supabase
           .from('notes')
           .update({
             reminder_completed_at: new Date().toISOString(),
-            reminder_active: isUnscheduledTask ? false : false // Both become inactive
+            reminder_active: false,
           })
           .eq('id', noteId);
+        if (updateError) {
+          console.error('[ReminderService] Failed to mark reminder done:', updateError);
+          return false;
+        }
       }
 
       // Update last reminded timestamp
@@ -743,32 +854,48 @@ class ReminderService {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return false;
 
-      const todayStr = new Date().toISOString().split('T')[0];
+      // Use local date to match the completed_date stored by markReminderDone.
+      const localToday = new Date();
+      localToday.setHours(0, 0, 0, 0);
+      const todayStr = localToday.toISOString().split('T')[0];
 
       // Get the note
-      const { data: note } = await supabase
+      const { data: note, error: fetchError } = await supabase
         .from('notes')
         .select('reminder_type, is_reminder, note_type')
         .eq('id', noteId)
         .single();
 
+      if (fetchError) {
+        console.error('[ReminderService] Failed to fetch note for undoReminderDone:', fetchError);
+        return false;
+      }
+
       if (note?.reminder_type === 'recurring') {
         // Remove from completions table
-        await supabase
+        const { error: deleteError } = await supabase
           .from('reminder_completions')
           .delete()
           .eq('note_id', noteId)
           .eq('user_id', user.id)
           .eq('completed_date', todayStr);
+        if (deleteError) {
+          console.error('[ReminderService] Failed to undo recurring completion:', deleteError);
+          return false;
+        }
       } else {
         // Reactivate one-time reminder OR unscheduled task
-        await supabase
+        const { error: updateError } = await supabase
           .from('notes')
           .update({
             reminder_completed_at: null,
             reminder_active: true
           })
           .eq('id', noteId);
+        if (updateError) {
+          console.error('[ReminderService] Failed to undo reminder done:', updateError);
+          return false;
+        }
       }
 
       return true;

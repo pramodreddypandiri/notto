@@ -90,6 +90,7 @@ export function PhotoPreview({ photo, visible, onClose }: PhotoPreviewProps) {
 
   const tapGesture = Gesture.Tap()
     .numberOfTaps(1)
+    .runOnJS(true)
     .onEnd(() => {
       // Only close if not zoomed
       if (scale.value <= 1.1) {
@@ -100,6 +101,7 @@ export function PhotoPreview({ photo, visible, onClose }: PhotoPreviewProps) {
 
   const doubleTapGesture = Gesture.Tap()
     .numberOfTaps(2)
+    .runOnJS(true)
     .onEnd(() => {
       if (scale.value > 1) {
         // Reset zoom

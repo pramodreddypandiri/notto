@@ -52,7 +52,7 @@ export default function RootLayout() {
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data as Record<string, string> | undefined;
-      if (data?.type === 'onboarding' && data?.targetTab && isAuthenticated) {
+      if (data?.targetTab && isAuthenticated) {
         // @ts-ignore
         router.push(data.targetTab);
       }

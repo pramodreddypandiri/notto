@@ -314,6 +314,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   keyboardAvoid: {
+    flex: 1,
     justifyContent: 'flex-end',
   },
   sheet: {

@@ -20,6 +20,8 @@ import {
   Image,
   TextInput,
   TouchableOpacity,
+  KeyboardAvoidingView,
+  ScrollView,
   Platform,
   StatusBar,
 } from 'react-native';
@@ -335,76 +337,83 @@ export function CameraView({ visible, onClose, onCapture }: CameraViewProps) {
           exiting={SlideOutDown}
           style={[StyleSheet.absoluteFill, styles.detailsContainer]}
         >
-          {/* Preview thumbnail */}
-          <View style={styles.detailsHeader}>
-            <TouchableOpacity onPress={() => setStep('preview')}>
-              <Ionicons name="arrow-back" size={24} color={colors.neutral[0]} />
-            </TouchableOpacity>
-            <Text style={styles.detailsTitle}>Add Details</Text>
-            <View style={{ width: 24 }} />
-          </View>
-
-          <Image source={{ uri: capturedUri }} style={styles.detailsPreview} />
-
-          {/* Category selection */}
-          <Text style={styles.sectionLabel}>Category</Text>
-          <View style={styles.categoryRow}>
-            {CATEGORY_OPTIONS.map((option) => (
-              <TouchableOpacity
-                key={option.value}
-                style={[
-                  styles.categoryChip,
-                  category === option.value && styles.categoryChipSelected,
-                ]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setCategory(option.value);
-                }}
-              >
-                <Ionicons
-                  name={option.icon as any}
-                  size={20}
-                  color={category === option.value ? colors.neutral[0] : colors.neutral[300]}
-                />
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    category === option.value && styles.categoryChipTextSelected,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Caption input */}
-          <Text style={styles.sectionLabel}>Caption (optional)</Text>
-          <TextInput
-            style={styles.captionInput}
-            placeholder="What's this about?"
-            placeholderTextColor={colors.neutral[500]}
-            value={caption}
-            onChangeText={setCaption}
-            multiline
-            maxLength={200}
-          />
-
-          {/* Save button */}
-          <TouchableOpacity
-            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-            onPress={handleSave}
-            disabled={saving}
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
-            {saving ? (
-              <Text style={styles.saveButtonText}>Saving...</Text>
-            ) : (
-              <>
-                <Ionicons name="checkmark" size={24} color={colors.neutral[0]} />
-                <Text style={styles.saveButtonText}>Save to Journal</Text>
-              </>
-            )}
-          </TouchableOpacity>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {/* Preview thumbnail */}
+              <View style={styles.detailsHeader}>
+                <TouchableOpacity onPress={() => setStep('preview')}>
+                  <Ionicons name="arrow-back" size={24} color={colors.neutral[0]} />
+                </TouchableOpacity>
+                <Text style={styles.detailsTitle}>Add Details</Text>
+                <View style={{ width: 24 }} />
+              </View>
+
+              <Image source={{ uri: capturedUri }} style={styles.detailsPreview} />
+
+              {/* Category selection */}
+              <Text style={styles.sectionLabel}>Category</Text>
+              <View style={styles.categoryRow}>
+                {CATEGORY_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.categoryChip,
+                      category === option.value && styles.categoryChipSelected,
+                    ]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setCategory(option.value);
+                    }}
+                  >
+                    <Ionicons
+                      name={option.icon as any}
+                      size={20}
+                      color={category === option.value ? colors.neutral[0] : colors.neutral[300]}
+                    />
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        category === option.value && styles.categoryChipTextSelected,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Caption input */}
+              <Text style={styles.sectionLabel}>Caption (optional)</Text>
+              <TextInput
+                style={styles.captionInput}
+                placeholder="What's this about?"
+                placeholderTextColor={colors.neutral[500]}
+                value={caption}
+                onChangeText={setCaption}
+                multiline
+                maxLength={200}
+              />
+
+              {/* Save button */}
+              <TouchableOpacity
+                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                onPress={handleSave}
+                disabled={saving}
+              >
+                {saving ? (
+                  <Text style={styles.saveButtonText}>Saving...</Text>
+                ) : (
+                  <>
+                    <Ionicons name="checkmark" size={24} color={colors.neutral[0]} />
+                    <Text style={styles.saveButtonText}>Save to Journal</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </Animated.View>
       )}
     </View>

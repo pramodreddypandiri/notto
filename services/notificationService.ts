@@ -111,7 +111,7 @@ class NotificationService {
           body,
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
-          data: { type: 'reminder' },
+          data: { type: 'reminder', targetTab: '/(tabs)/reminders' },
         },
         trigger,
       });

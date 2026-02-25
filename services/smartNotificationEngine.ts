@@ -463,7 +463,7 @@ async function scheduleFoodInsight(analysis: FoodAnalysis): Promise<void> {
     analysis.notificationTitle,
     analysis.notificationBody,
     fireAt,
-    { notifType: 'food_insight', pattern: analysis.pattern },
+    { notifType: 'food_insight', pattern: analysis.pattern, targetTab: '/(tabs)/journal' },
   );
 
   console.log(`[SmartNotifications] Food insight (${analysis.pattern}) scheduled at ${fireAt.toLocaleTimeString()}`);
@@ -512,7 +512,7 @@ export async function rescheduleSmartNotifications(): Promise<void> {
       morningTitle,
       morningBody,
       nextOccurrence(wake.hour, wake.minute),
-      { notifType: 'morning' },
+      { notifType: 'morning', targetTab: '/(tabs)/' },
     );
     console.log(`[SmartNotifications] Morning scheduled at ${wake.hour}:${String(wake.minute).padStart(2, '0')}`);
 
@@ -526,7 +526,7 @@ export async function rescheduleSmartNotifications(): Promise<void> {
         bedContent.title,
         bedContent.body,
         nextOccurrence(bed.hour, bed.minute),
-        { notifType: 'bedtime' },
+        { notifType: 'bedtime', targetTab: '/(tabs)/reminders' },
       );
       console.log(`[SmartNotifications] Bedtime scheduled at ${bed.hour}:${String(bed.minute).padStart(2, '0')} (${pendingCount} pending tasks)`);
     } else {
