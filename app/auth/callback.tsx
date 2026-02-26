@@ -1,11 +1,12 @@
-import { useEffect } from 'react';
-import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, ActivityIndicator, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../config/supabase';
 
 export default function AuthCallback() {
   const router = useRouter();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const handleDeepLink = async () => {
@@ -39,6 +40,12 @@ export default function AuthCallback() {
             }
             return;
           }
+          setErrorMessage(
+            error.message.toLowerCase().includes('expired')
+              ? 'This verification link has expired. Please request a new one.'
+              : 'This verification link is invalid or has already been used.'
+          );
+          return;
         } else if (access_token && refresh_token) {
           const { error } = await supabase.auth.setSession({
             access_token,
@@ -61,6 +68,22 @@ export default function AuthCallback() {
     handleDeepLink();
   }, []);
 
+  if (errorMessage) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorTitle}>Verification Failed</Text>
+        <Text style={styles.errorText}>{errorMessage}</Text>
+        <TouchableOpacity
+          style={styles.button}
+          // @ts-ignore
+          onPress={() => router.replace('/(auth)/login')}
+        >
+          <Text style={styles.buttonText}>Back to Login</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color="#6366f1" />
@@ -75,10 +98,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
+    padding: 24,
   },
   text: {
     marginTop: 16,
     fontSize: 16,
     color: '#666',
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 15,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 22,
+  },
+  button: {
+    backgroundColor: '#6366f1',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

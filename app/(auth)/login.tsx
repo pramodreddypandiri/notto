@@ -28,6 +28,20 @@ export default function LoginScreen() {
   const { isDark } = useTheme();
   const themedColors = getThemedColors(isDark);
 
+  const handleResendVerification = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Please enter your email address first');
+      return;
+    }
+    try {
+      const { error } = await supabase.auth.resend({ type: 'signup', email });
+      if (error) throw error;
+      Alert.alert('Email Sent', 'Verification email resent. Please check your inbox.');
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
@@ -36,12 +50,25 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) throw error;
+
+      if (!data.user?.email_confirmed_at) {
+        await supabase.auth.signOut();
+        Alert.alert(
+          'Email Not Verified',
+          'Please verify your email before signing in. Check your inbox for the confirmation link.',
+          [
+            { text: 'Resend Email', onPress: handleResendVerification },
+            { text: 'OK' },
+          ]
+        );
+        return;
+      }
 
       // @ts-ignore
       router.replace('/(tabs)');
