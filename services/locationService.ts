@@ -581,7 +581,7 @@ class LocationService {
         timeInterval: 5 * 60 * 1000, // Every 5 minutes
         distanceInterval: 100, // Or every 100 meters
         deferredUpdatesInterval: 5 * 60 * 1000,
-        showsBackgroundLocationIndicator: false,
+        showsBackgroundLocationIndicator: true,
         foregroundService: {
           notificationTitle: 'Location Reminders Active',
           notificationBody: 'Monitoring for nearby stores',
